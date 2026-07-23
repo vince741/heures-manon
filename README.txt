@@ -1,9 +1,27 @@
-AidePlanning V5 — OCR renforcé
+AidePlanning V6 — version propre
 
-- agrandissement automatique de la photo
-- contraste et niveaux de gris
-- lecture OCR plus robuste avec langue anglaise (les chiffres et noms français restent lisibles)
-- recherche des horaires dans tout le texte, même si les lignes sont fusionnées
-- affichage du texte reconnu pour diagnostic
+Fonctions :
+- calendrier mensuel
+- plusieurs interventions par jour
+- bénéficiaires enregistrés
+- temps de travail et temps de trajet
+- fiche bénéficiaire avec téléphone, carte, notes et historique
+- statistiques mensuelles et hebdomadaires
+- contrôle automatique des chevauchements d’horaires
+- export CSV
+- sauvegarde complète JSON et restauration
+- fonctionnement hors ligne
+- aucune fonction photo
+- aucun service externe
+- aucun abonnement
 
-Après mise à jour GitHub, ouvrir avec Internet puis fermer et rouvrir l’app.
+Mise à jour :
+1. Dézipper ce fichier.
+2. Remplacer tous les fichiers du dépôt GitHub.
+3. Faire Commit changes.
+4. Attendre 1 à 3 minutes.
+5. Ouvrir l’application avec Internet.
+6. Fermer puis rouvrir l’application.
+
+Cette version essaie de reprendre automatiquement les données locales des anciennes versions.
+Par sécurité, crée une sauvegarde complète avant la mise à jour.
