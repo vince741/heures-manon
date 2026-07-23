@@ -20,223 +20,168 @@ $("csv").onclick=()=>{let r=[["Date","Bénéficiaire","Entrée","Sortie","Temps 
 $("backup").onclick=()=>download(JSON.stringify(db,null,2),"aideplanning-sauvegarde.json","application/json");$("restore").onchange=async e=>{try{let x=JSON.parse(await e.target.files[0].text());if(!x.people||!x.visits)throw 0;if(confirm("Remplacer les données actuelles ?")){db=x;save();render();toast("Sauvegarde restaurée")}}catch{toast("Fichier invalide")}};
 
 
+
 function normalizeOcrText(text){
-  return text
+  return String(text||"")
     .replace(/[|]/g,"I")
     .replace(/[–—−]/g,"-")
     .replace(/[’`]/g,"'")
-    .replace(/\r/g,"")
+    .replace(/\r/g,"\n")
+    .replace(/[ \t]+/g," ")
     .trim();
 }
 function cleanOcrName(raw){
-  return raw
-    .replace(/^[^A-Za-zÀ-ÿ]*(?:M\.?|Mme|Madame|Monsieur)?\s*/i, m => m)
-    .replace(/\s+[iIlL1]$/,"")
-    .replace(/[©®•■□▪]+/g," ")
+  return String(raw||"")
+    .replace(/^[^A-Za-zÀ-ÿ]*(?:De\s*)?/i,"")
+    .replace(/\s+[iIlL1]$/g,"")
+    .replace(/[©®•■□▪✓✔]+/g," ")
     .replace(/\s+/g," ")
+    .replace(/^[\s:;,.\-]+|[\s:;,.\-]+$/g,"")
     .trim();
 }
 function bestPersonMatch(raw){
-  const q=raw.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/gi," ").replace(/\s+/g," ").trim();
+  const q=String(raw||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
   if(!q)return "";
   let best="",score=0;
   db.people.forEach(p=>{
-    const name=p.name.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/gi," ");
+    const name=p.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g," ");
     const words=q.split(/\s+/).filter(w=>w.length>2);
     let s=words.filter(w=>name.includes(w)).length;
-    if(name.includes(q)||q.includes(name))s+=4;
+    if(name.includes(q)||q.includes(name))s+=5;
     if(s>score){score=s;best=p.id}
   });
   return score>0?best:"";
 }
-const MONTHS_FR={
-  janvier:1,fevrier:2,février:2,mars:3,avril:4,mai:5,juin:6,
-  juillet:7,aout:8,août:8,septembre:9,octobre:10,novembre:11,decembre:12,décembre:12
-};
-function parseFrenchDate(line, fallbackDate){
-  const normalized=line.toLowerCase().replace(/[^\wà-ÿ ]/g," ").replace(/\s+/g," ");
-  const m=normalized.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)?\s*(\d{1,2})\s+([a-zà-ÿ]+)\s+(\d{4})/i);
-  if(!m)return fallbackDate;
-  const monthNum=MONTHS_FR[m[2]];
-  if(!monthNum)return fallbackDate;
-  return `${m[3]}-${pad(monthNum)}-${pad(Number(m[1]))}`;
+const MONTHS_FR={janvier:1,fevrier:2,février:2,mars:3,avril:4,mai:5,juin:6,juillet:7,aout:8,août:8,septembre:9,octobre:10,novembre:11,decembre:12,décembre:12};
+function parseFrenchDate(line,fallback){
+  const x=String(line||"").toLowerCase().replace(/[^a-zà-ÿ0-9 ]/g," ").replace(/\s+/g," ");
+  const m=x.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)?\s*(\d{1,2})\s+([a-zà-ÿ]+)\s+(20\d{2})/i);
+  if(!m||!MONTHS_FR[m[2]])return fallback;
+  return `${m[3]}-${pad(MONTHS_FR[m[2]])}-${pad(Number(m[1]))}`;
 }
-function normalizeTimePart(value){
-  return value
+function normalizeDigits(text){
+  return String(text||"")
     .replace(/[oO]/g,"0")
     .replace(/[lI|]/g,"1")
     .replace(/[;,]/g,":")
-    .replace(/\s/g,"");
+    .replace(/(\d{1,2})[hH.](\d{2})/g,"$1:$2");
 }
-function extractTimeRange(line){
-  const normalized=normalizeTimePart(line)
-    .replace(/(\d{1,2})[hH.](\d{2})/g,"$1:$2")
-    .replace(/\bde\b/ig," ")
-    .replace(/\b[aà]\b/ig," - ")
-    .replace(/→/g,"-");
-  const m=normalized.match(/(\d{1,2}):(\d{2})\D{0,8}(\d{1,2}):(\d{2})/);
-  if(!m)return null;
-  const sh=Number(m[1]),sm=Number(m[2]),eh=Number(m[3]),em=Number(m[4]);
-  if(sh>23||eh>23||sm>59||em>59)return null;
-  return {start:`${pad(sh)}:${pad(sm)}`,end:`${pad(eh)}:${pad(em)}`};
+function extractRanges(text){
+  const x=normalizeDigits(text);
+  const re=/(\d{1,2})\s*:\s*(\d{2})\s*(?:a|à|-|→|au|jusqu.?a|jusqu.?à|[^0-9]{1,12})\s*(\d{1,2})\s*:\s*(\d{2})/gi;
+  const out=[]; let m;
+  while((m=re.exec(x))){
+    const sh=+m[1],sm=+m[2],eh=+m[3],em=+m[4];
+    if(sh<=23&&eh<=23&&sm<=59&&em<=59) out.push({index:m.index,endIndex:re.lastIndex,start:`${pad(sh)}:${pad(sm)}`,end:`${pad(eh)}:${pad(em)}`});
+  }
+  return out;
 }
-function isNoiseLine(line){
-  const x=line.toLowerCase();
-  return !line || /planning|jour|semaine|mois|modif|choisir|fichier|analyser|photo/i.test(x)
-    || /^[iIlL1✓✔\s]+$/.test(line);
+function isNoiseName(line){
+  const x=String(line||"").toLowerCase();
+  return !x || /planning|jour|semaine|mois|modif|jeudi|vendredi|lundi|mardi|mercredi|samedi|dimanche/i.test(x) || /^\W*[i1l✓✔]+\W*$/i.test(x);
 }
-function parseOcrLines(text, fallbackDate){
-  const lines=normalizeOcrText(text).split(/\n+/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
-  const rows=[];
-  let currentDate=fallbackDate;
+function parseOcrLines(text,fallbackDate){
+  const raw=normalizeOcrText(text);
+  const lines=raw.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const rows=[]; let currentDate=fallbackDate;
+  // Preferred line-by-line parsing.
   for(let i=0;i<lines.length;i++){
     const line=lines[i];
-    const detectedDate=parseFrenchDate(line,currentDate);
-    if(detectedDate!==currentDate || /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)/i.test(line)){
-      currentDate=detectedDate;
-      continue;
+    const dateFound=parseFrenchDate(line,currentDate);
+    if(dateFound!==currentDate || /lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche/i.test(line)){
+      currentDate=dateFound; continue;
     }
-    const range=extractTimeRange(line);
-    if(!range)continue;
-
-    let rawName="";
-    const after=line.replace(/.*?(\d{1,2})\s*[:hH.;,]\s*(\d{2}).*?(\d{1,2})\s*[:hH.;,]\s*(\d{2})/,"").trim();
-    if(after && !isNoiseLine(after))rawName=after;
-
-    if(!rawName){
-      for(let j=i+1;j<Math.min(lines.length,i+4);j++){
-        if(extractTimeRange(lines[j]))break;
-        if(parseFrenchDate(lines[j],currentDate)!==currentDate)break;
-        if(!isNoiseLine(lines[j])){
-          rawName=lines[j];
-          i=j;
-          break;
-        }
+    const ranges=extractRanges(line);
+    if(!ranges.length)continue;
+    const r=ranges[0]; let name="";
+    const tail=cleanOcrName(line.slice(r.endIndex));
+    if(tail&&!isNoiseName(tail))name=tail;
+    if(!name){
+      for(let j=i+1;j<Math.min(lines.length,i+5);j++){
+        const candidate=cleanOcrName(lines[j]);
+        if(extractRanges(lines[j]).length)break;
+        const nextDate=parseFrenchDate(lines[j],currentDate);
+        if(nextDate!==currentDate)break;
+        if(!isNoiseName(candidate)){name=candidate;i=j;break;}
       }
     }
-    rawName=cleanOcrName(rawName);
-    rows.push({
-      date:currentDate,
-      personId:bestPersonMatch(rawName),
-      rawName,
-      start:range.start,
-      end:range.end
+    rows.push({date:currentDate,personId:bestPersonMatch(name),rawName:name,start:r.start,end:r.end});
+  }
+  // Fallback: OCR may merge everything into one paragraph.
+  if(!rows.length){
+    const flat=raw.replace(/\n+/g," ");
+    const ranges=extractRanges(flat);
+    ranges.forEach((r,idx)=>{
+      const nextStart=idx+1<ranges.length?ranges[idx+1].index:Math.min(flat.length,r.endIndex+90);
+      let between=flat.slice(r.endIndex,nextStart);
+      between=between.replace(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+20\d{2}/ig," ");
+      let name=cleanOcrName(between.split(/\s{2,}|\bDe\s+\d/i)[0]);
+      if(name.length>55)name=name.slice(0,55).trim();
+      rows.push({date:fallbackDate,personId:bestPersonMatch(name),rawName:name,start:r.start,end:r.end});
     });
   }
   return rows;
 }
+async function preprocessOcrImage(file){
+  const bitmap=await createImageBitmap(file);
+  // Crop small outer margins and upscale for OCR.
+  const sx=Math.round(bitmap.width*0.08), sy=Math.round(bitmap.height*0.04);
+  const sw=Math.round(bitmap.width*0.84), sh=Math.round(bitmap.height*0.92);
+  const scale=Math.max(2,Math.min(3,1800/sw));
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.round(sw*scale);canvas.height=Math.round(sh*scale);
+  const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
+  ctx.drawImage(bitmap,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+  const image=ctx.getImageData(0,0,canvas.width,canvas.height),d=image.data;
+  for(let i=0;i<d.length;i+=4){
+    let gray=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    gray=(gray-128)*1.75+128;
+    gray=gray>150?255:gray<75?0:gray;
+    d[i]=d[i+1]=d[i+2]=Math.max(0,Math.min(255,gray));
+  }
+  ctx.putImageData(image,0,0);
+  return canvas;
+}
 function personOptions(selected="",rawName=""){
   let opts='<option value="">Choisir / créer ensuite</option>';
-  db.people.slice().sort((a,b)=>a.name.localeCompare(b.name,"fr")).forEach(p=>{
-    opts+=`<option value="${p.id}" ${p.id===selected?"selected":""}>${esc(p.name)}</option>`;
-  });
-  if(rawName && !selected) opts+=`<option value="__new__" selected>Créer : ${esc(rawName)}</option>`;
+  db.people.slice().sort((a,b)=>a.name.localeCompare(b.name,"fr")).forEach(p=>opts+=`<option value="${p.id}" ${p.id===selected?"selected":""}>${esc(p.name)}</option>`);
+  if(rawName&&!selected)opts+=`<option value="__new__" selected>Créer : ${esc(rawName)}</option>`;
   return opts;
 }
 function addOcrReviewRow(row={date:key(selected),personId:"",rawName:"",start:"08:00",end:"09:00"}){
-  const wrap=document.createElement("div");
-  wrap.className="ocr-row";
-  wrap.innerHTML=`
-    <label class="ocr-date">Date
-      <input class="ocr-date-input" type="date" value="${row.date||key(selected)}" required>
-    </label>
-    <label class="ocr-person">Bénéficiaire
-      <select class="ocr-person-select">${personOptions(row.personId,row.rawName)}</select>
-      <input class="ocr-new-name" placeholder="Nom à créer" value="${esc(row.rawName)}" ${row.personId?'hidden':''}>
-    </label>
-    <label>Entrée<input class="ocr-start" type="time" value="${row.start}" required></label>
-    <label>Sortie<input class="ocr-end" type="time" value="${row.end}" required></label>
-    <button type="button" class="ocr-remove">×</button>`;
-  const select=wrap.querySelector(".ocr-person-select"),newName=wrap.querySelector(".ocr-new-name");
-  select.addEventListener("change",()=>{newName.hidden=select.value!=="__new__"});
-  wrap.querySelector(".ocr-remove").onclick=()=>wrap.remove();
-  $("ocrRows").appendChild(wrap);
+  const wrap=document.createElement("div");wrap.className="ocr-row";
+  wrap.innerHTML=`<label class="ocr-date">Date<input class="ocr-date-input" type="date" value="${row.date||key(selected)}" required></label><label class="ocr-person">Bénéficiaire<select class="ocr-person-select">${personOptions(row.personId,row.rawName)}</select><input class="ocr-new-name" placeholder="Nom à créer" value="${esc(row.rawName)}" ${row.personId?'hidden':''}></label><label>Entrée<input class="ocr-start" type="time" value="${row.start}" required></label><label>Sortie<input class="ocr-end" type="time" value="${row.end}" required></label><button type="button" class="ocr-remove">×</button>`;
+  const sel=wrap.querySelector(".ocr-person-select"),name=wrap.querySelector(".ocr-new-name");sel.onchange=()=>name.hidden=sel.value!=="__new__";wrap.querySelector(".ocr-remove").onclick=()=>wrap.remove();$("ocrRows").appendChild(wrap);
 }
 function openPhotoImport(){
-  $("photoDate").value=key(selected);
-  $("photoInput").value="";
-  $("photoPreview").hidden=true;
-  $("ocrProgress").textContent="";
-  $("ocrRows").innerHTML="";
-  $("ocrReview").hidden=true;
+  $("photoDate").value=key(selected);$("photoInput").value="";$("photoPreview").hidden=true;$("ocrProgress").textContent="";$("ocrRows").innerHTML="";$("ocrReview").hidden=true;
+  if($("ocrRawText"))$("ocrRawText").value="";
   $("photoDlg").showModal();
 }
 $("importPhoto").onclick=openPhotoImport;
-$("photoInput").onchange=e=>{
-  const file=e.target.files?.[0];
-  if(!file)return;
-  $("photoPreview").src=URL.createObjectURL(file);
-  $("photoPreview").hidden=false;
-};
+$("photoInput").onchange=e=>{const file=e.target.files?.[0];if(!file)return;$("photoPreview").src=URL.createObjectURL(file);$("photoPreview").hidden=false;};
 $("analyzePhoto").onclick=async()=>{
-  const file=$("photoInput").files?.[0];
-  if(!file)return toast("Choisissez une photo.");
+  const file=$("photoInput").files?.[0];if(!file)return toast("Choisissez une photo.");
   if(typeof Tesseract==="undefined")return toast("Internet requis pour charger la lecture de photo.");
-  $("ocrProgress").textContent="Préparation de la lecture…";
-  $("analyzePhoto").disabled=true;
+  $("ocrProgress").textContent="Amélioration de la photo…";$("analyzePhoto").disabled=true;
   try{
-    const result=await Tesseract.recognize(file,"fra",{
-      logger:m=>{
-        if(m.status==="recognizing text"){
-          $("ocrProgress").textContent=`Lecture de la photo : ${Math.round((m.progress||0)*100)} %`;
-        }else{
-          $("ocrProgress").textContent="Analyse en cours…";
-        }
-      }
-    });
-    const rows=parseOcrLines(result.data.text||"",$("photoDate").value||key(selected));
-    $("ocrRows").innerHTML="";
-    rows.forEach(addOcrReviewRow);
-    if(!rows.length){
-      addOcrReviewRow({date:$("photoDate").value||key(selected),personId:"",rawName:"",start:"08:00",end:"09:00"});
-      toast("Aucune ligne certaine : essaie une photo plus proche et bien droite.");
-    }
-    $("ocrReview").hidden=false;
-    $("ocrProgress").textContent=`${rows.length} ligne${rows.length>1?"s":""} détectée${rows.length>1?"s":""}.`;
-  }catch(err){
-    console.error(err);
-    $("ocrProgress").textContent="La photo n’a pas pu être lue.";
-    toast("Échec de lecture. Essaie une photo plus nette.");
-  }finally{
-    $("analyzePhoto").disabled=false;
-  }
+    const prepared=await preprocessOcrImage(file);
+    const result=await Tesseract.recognize(prepared,"eng",{logger:m=>{$("ocrProgress").textContent=m.status==="recognizing text"?`Lecture : ${Math.round((m.progress||0)*100)} %`:"Analyse en cours…";}});
+    const raw=result.data.text||"";
+    if($("ocrRawText"))$("ocrRawText").value=raw;
+    const rows=parseOcrLines(raw,$("photoDate").value||key(selected));
+    $("ocrRows").innerHTML="";rows.forEach(addOcrReviewRow);
+    if(!rows.length){addOcrReviewRow({date:$("photoDate").value||key(selected)});toast("Aucun horaire reconnu. Le texte lu est affiché plus bas.");}
+    $("ocrReview").hidden=false;$("ocrProgress").textContent=`${rows.length} ligne${rows.length>1?"s":""} détectée${rows.length>1?"s":""}.`;
+  }catch(err){console.error(err);$("ocrProgress").textContent="Erreur de lecture.";toast("Échec de lecture de la photo.");}
+  finally{$("analyzePhoto").disabled=false;}
 };
 $("addOcrRow").onclick=()=>addOcrReviewRow({date:$("photoDate").value||key(selected)});
 $("importOcrRows").onclick=()=>{
-  const rows=[...document.querySelectorAll(".ocr-row")];
-  if(!rows.length)return toast("Aucune intervention à importer.");
-  let imported=0,lastDate=null;
-  for(const row of rows){
-    const date=row.querySelector(".ocr-date-input").value;
-    if(!date)continue;
-    const select=row.querySelector(".ocr-person-select");
-    let personId=select.value;
-    if(personId==="__new__"||!personId){
-      const name=row.querySelector(".ocr-new-name").value.trim();
-      if(!name)continue;
-      const existing=db.people.find(p=>p.name.toLowerCase()===name.toLowerCase());
-      if(existing)personId=existing.id;
-      else{
-        personId=uid("p");
-        db.people.push({id:personId,name,address:"",phone:"",notes:"Créé depuis l’import photo"});
-      }
-    }
-    const start=row.querySelector(".ocr-start").value,end=row.querySelector(".ocr-end").value;
-    if(!start||!end)continue;
-    db.visits[date]??=[];
-    db.visits[date].push({id:uid("v"),personId,start,end,travel:"00:00",note:"Importé depuis une photo"});
-    imported++;lastDate=date;
-  }
-  save();
-  if(lastDate){
-    const parts=lastDate.split("-").map(Number);
-    selected=new Date(parts[0],parts[1]-1,parts[2]);
-    month=new Date(parts[0],parts[1]-1,1);
-  }
-  $("photoDlg").close();
-  show("planning");
-  render();
-  toast(`${imported} intervention${imported>1?"s":""} importée${imported>1?"s":""}.`);
+  const rows=[...document.querySelectorAll(".ocr-row")];if(!rows.length)return toast("Aucune intervention à importer.");let imported=0,lastDate=null;
+  for(const row of rows){const date=row.querySelector(".ocr-date-input").value;if(!date)continue;const select=row.querySelector(".ocr-person-select");let personId=select.value;if(personId==="__new__"||!personId){const name=row.querySelector(".ocr-new-name").value.trim();if(!name)continue;const existing=db.people.find(p=>p.name.toLowerCase()===name.toLowerCase());if(existing)personId=existing.id;else{personId=uid("p");db.people.push({id:personId,name,address:"",phone:"",notes:"Créé depuis l’import photo"});}}const start=row.querySelector(".ocr-start").value,end=row.querySelector(".ocr-end").value;if(!start||!end)continue;db.visits[date]??=[];db.visits[date].push({id:uid("v"),personId,start,end,travel:"00:00",note:"Importé depuis une photo"});imported++;lastDate=date;}
+  save();if(lastDate){const p=lastDate.split("-").map(Number);selected=new Date(p[0],p[1]-1,p[2]);month=new Date(p[0],p[1]-1,1);}$("photoDlg").close();show("planning");render();toast(`${imported} intervention${imported>1?"s":""} importée${imported>1?"s":""}.`);
 };
 
 if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"));render();

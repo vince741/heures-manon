@@ -14,3 +14,5 @@
   .ocr-row{grid-template-columns:1fr 1fr}
   .ocr-row .ocr-date,.ocr-row .ocr-person{grid-column:1/-1}
 }
+
+.ocr-debug{margin:12px 0;color:#667085}.ocr-debug summary{font-weight:800;cursor:pointer}.ocr-debug textarea{margin-top:8px;font-size:12px;line-height:1.4}
