@@ -1,23 +1,20 @@
-AidePlanning V10 — Réglages organisés
+AidePlanning V11.1 Premium
 
 Nouveautés :
-- onglet Plus compact, organisé comme les Réglages d’un téléphone
-- rubriques séparées :
-  - Apparence
-  - Données et sauvegarde
-  - Installer l’application
-  - À propos
-- choix de la couleur indépendant du mode d’affichage
-- mode Clair ou Sombre applicable à chaque palette
-- palettes disponibles :
-  Rose, Lavande, Océan, Menthe, Coucher de soleil, Pêche et Baies
-- reprise automatique de l’ancien thème
-- toutes les fonctions précédentes conservées
+- centre de retours relié au Google Form public
+- Avis, Bug, Suggestion et Contact préremplis automatiquement
+- fenêtre intermédiaire élégante avant l’ouverture du formulaire
+- page À propos enrichie
+- rubrique Nouveautés actualisée
+- cache hors ligne mis à jour
 
-Installation :
-1. Créer une sauvegarde JSON.
-2. Dézipper l’archive.
-3. Remplacer tous les fichiers du dépôt GitHub.
-4. Faire Commit changes.
-5. Ouvrir l’application une fois avec Internet.
-6. Fermer puis relancer l’application.
+Installation sur GitHub Pages :
+1. Faire une sauvegarde JSON depuis l’application actuelle.
+2. Dézipper cette archive.
+3. Remplacer tous les fichiers du dépôt GitHub par ceux de l’archive.
+4. Valider avec Commit changes.
+5. Attendre quelques minutes.
+6. Ouvrir l’application une fois avec Internet.
+7. Fermer puis relancer l’application installée.
+
+Les données locales existantes sont conservées.

@@ -148,11 +148,11 @@ function showPage(id){
 }
 const paletteNames={
   rose:"Rose",lavender:"Lavande",ocean:"Océan",mint:"Menthe",
-  sunset:"Coucher de soleil",peach:"Pêche",berry:"Baies"
+  sunset:"Coucher de soleil",peach:"Pêche",berry:"Baies",red:"Rouge",indigo:"Indigo",turquoise:"Turquoise",graphite:"Graphite",sand:"Sable"
 };
 const paletteColors={
   rose:"#ff4f8b",lavender:"#8b5cf6",ocean:"#2388d9",mint:"#34a77b",
-  sunset:"#f97355",peach:"#f39a72",berry:"#cf3f7b"
+  sunset:"#f97355",peach:"#f39a72",berry:"#cf3f7b",red:"#e5484d",indigo:"#4f46e5",turquoise:"#18a7a0",graphite:"#59616d",sand:"#b5895a"
 };
 function applyAppearance(palette,mode){
   const palettes=Object.keys(paletteNames);
@@ -197,6 +197,32 @@ $("exportCsvBtn").onclick=()=>{const rows=[["Date","Bénéficiaire","Entrée","S
 $("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauvegarde-${new Date().toISOString().slice(0,10)}.json`,"application/json");
 $("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());if(!parsed.people||!parsed.visits)throw new Error();if(confirm("Remplacer toutes les données actuelles ?")){db=parsed;save();render();toast("Sauvegarde restaurée.")}}catch{toast("Sauvegarde invalide.")}e.target.value=""};
 
+
+const feedbackConfigs={
+  review:{title:"Donner mon avis",emoji:"♥",intro:"Merci d’utiliser AidePlanning. Votre avis aide à améliorer l’application.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%E2%9D%A4%EF%B8%8F+Avis"},
+  bug:{title:"Signaler un bug",emoji:"🐞",intro:"Décrivez le problème rencontré afin qu’il puisse être corrigé.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%F0%9F%90%9E+Bug"},
+  idea:{title:"Proposer une idée",emoji:"💡",intro:"Partagez une fonctionnalité ou une amélioration que vous aimeriez retrouver dans AidePlanning.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%F0%9F%92%A1+Suggestion"},
+  contact:{title:"Contacter le développeur",emoji:"✉️",intro:"Posez une question ou envoyez simplement un message.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%E2%9C%89%EF%B8%8F+Contact"}
+};
+let activeFeedbackType="review";
+function openFeedback(type){
+  activeFeedbackType=type;
+  const c=feedbackConfigs[type];
+  $("feedbackTitle").textContent=c.title;
+  $("feedbackEmoji").textContent=c.emoji;
+  $("feedbackIntro").textContent=c.intro;
+  $("openFeedbackFormBtn").textContent=type==="bug"?"Envoyer un rapport":"Ouvrir le formulaire";
+  $("feedbackDialog").showModal();
+}
+document.querySelectorAll("[data-open-feedback]").forEach(b=>b.onclick=()=>openFeedback(b.dataset.openFeedback));
+$("openFeedbackFormBtn").onclick=()=>{
+  const c=feedbackConfigs[activeFeedbackType];
+  const opened=window.open(c.url,"_blank","noopener,noreferrer");
+  if(!opened)location.href=c.url;
+  $("feedbackDialog").close();
+};
+$("startAppBtn").onclick=()=>{localStorage.setItem("aideplanning_onboarding_done","1");$("onboardingDialog").close()};
+
 const legacyTheme=localStorage.getItem("aideplanning_theme");
 let initialPalette=localStorage.getItem(PALETTE_KEY);
 let initialMode=localStorage.getItem(MODE_KEY);
@@ -206,5 +232,6 @@ if(!initialPalette && legacyTheme){
   else{initialPalette=legacyTheme;initialMode="light"}
 }
 applyAppearance(initialPalette||"rose",initialMode||"light");
+if(!localStorage.getItem("aideplanning_onboarding_done"))setTimeout(()=>$("onboardingDialog").showModal(),250);
 if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
 render();

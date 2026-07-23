@@ -115,6 +115,8 @@
         <h2>Plus</h2>
       </div>
 
+      <section class="welcome-card"><div class="welcome-icon">👋</div><p class="section-kicker">BIENVENUE</p><h2>Bonjour</h2><p>Merci d’utiliser AidePlanning.</p><div class="welcome-badges"><span>✓ Hors ligne</span><span>✓ Sauvegarde locale</span><span>✓ Gratuit</span></div></section>
+
       <section class="settings-group">
         <button class="settings-row" data-open-settings="appearanceDialog">
           <span class="settings-icon">◐</span>
@@ -143,6 +145,12 @@
           <span class="settings-chevron">›</span>
         </button>
 
+        <button class="settings-row" data-open-feedback="review"><span class="settings-icon">♥</span><span class="settings-copy"><strong>Donner mon avis</strong><small>Noter l’application et partager un retour</small></span><span class="settings-chevron">›</span></button>
+        <button class="settings-row" data-open-feedback="bug"><span class="settings-icon">!</span><span class="settings-copy"><strong>Signaler un bug</strong><small>Décrire un problème rencontré</small></span><span class="settings-chevron">›</span></button>
+        <button class="settings-row" data-open-feedback="idea"><span class="settings-icon">✦</span><span class="settings-copy"><strong>Proposer une idée</strong><small>Suggérer une amélioration</small></span><span class="settings-chevron">›</span></button>
+        <button class="settings-row" data-open-feedback="contact"><span class="settings-icon">✉</span><span class="settings-copy"><strong>Contacter le développeur</strong><small>Envoyer une question ou un message</small></span><span class="settings-chevron">›</span></button>
+        <button class="settings-row" data-open-settings="supportDialog"><span class="settings-icon">☕</span><span class="settings-copy"><strong>Soutenir le projet</strong><small>Rubrique prête pour un futur lien</small></span><span class="settings-chevron">›</span></button>
+        <button class="settings-row" data-open-settings="whatsNewDialog"><span class="settings-icon">★</span><span class="settings-copy"><strong>Nouveautés</strong><small>Découvrir la version 1.1.1 Premium</small></span><span class="settings-chevron">›</span></button>
         <button class="settings-row" data-open-settings="aboutDialog">
           <span class="settings-icon">i</span>
           <span class="settings-copy">
@@ -347,6 +355,11 @@
           <span><strong>Baies</strong><small>Framboise et prune</small></span>
           <b>✓</b>
         </button>
+        <button class="palette-choice" data-palette-choice="red"><span class="palette-dot palette-red"></span><span><strong>Rouge</strong><small>Énergique et moderne</small></span><b>✓</b></button>
+        <button class="palette-choice" data-palette-choice="indigo"><span class="palette-dot palette-indigo"></span><span><strong>Indigo</strong><small>Profond et élégant</small></span><b>✓</b></button>
+        <button class="palette-choice" data-palette-choice="turquoise"><span class="palette-dot palette-turquoise"></span><span><strong>Turquoise</strong><small>Frais et lumineux</small></span><b>✓</b></button>
+        <button class="palette-choice" data-palette-choice="graphite"><span class="palette-dot palette-graphite"></span><span><strong>Graphite</strong><small>Sobre et professionnel</small></span><b>✓</b></button>
+        <button class="palette-choice" data-palette-choice="sand"><span class="palette-dot palette-sand"></span><span><strong>Sable</strong><small>Doux et naturel</small></span><b>✓</b></button>
       </div>
     </div>
   </div>
@@ -398,11 +411,35 @@
       </div>
       <button type="button" class="close-button" data-close="aboutDialog">×</button>
     </div>
-    <p><strong>AidePlanning</strong> aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
-    <p>L’application fonctionne hors ligne, sans publicité et sans abonnement.</p>
-    <p class="helper">Les informations sont enregistrées localement sur l’appareil.</p>
+    <div class="about-brand"><div class="about-logo">♥</div><div><strong>AidePlanning</strong><small>Version 1.1.1 Premium</small></div></div>
+    <p>AidePlanning aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
+    <div class="about-facts">
+      <div><span>Fonctionnement</span><strong>Hors ligne</strong></div>
+      <div><span>Données</span><strong>Stockées localement</strong></div>
+      <div><span>Coût</span><strong>Gratuit, sans abonnement</strong></div>
+      <div><span>Publicité</span><strong>Aucune</strong></div>
+    </div>
+    <p class="helper">Projet indépendant conçu pour faciliter le quotidien des aides à domicile. Merci à toutes les personnes qui partagent leurs retours et leurs idées.</p>
   </div>
 </dialog>
+
+
+<dialog id="onboardingDialog" class="sheet-dialog onboarding-dialog"><div class="modal-card onboarding-card"><div class="onboarding-logo">♥</div><p class="section-kicker">BIENVENUE</p><h1>AidePlanning</h1><p class="onboarding-text">Une application conçue pour simplifier le quotidien des aides à domicile. Tes données restent enregistrées sur ton appareil.</p><div class="onboarding-points"><span>✓ Fonctionne hors ligne</span><span>✓ Sauvegarde à tout moment</span><span>✓ Sans abonnement</span></div><button id="startAppBtn" class="primary-button full">Commencer</button></div></dialog>
+<dialog id="feedbackDialog" class="sheet-dialog">
+  <div class="modal-card feedback-card feedback-launch-card">
+    <div class="modal-header">
+      <div><p class="section-kicker">VOTRE RETOUR</p><h2 id="feedbackTitle">Donner mon avis</h2></div>
+      <button type="button" class="close-button" data-close="feedbackDialog">×</button>
+    </div>
+    <div id="feedbackEmoji" class="feedback-emoji">♥</div>
+    <p id="feedbackIntro" class="feedback-intro"></p>
+    <div class="external-form-note"><span>↗</span><p>Le formulaire sécurisé Google Forms s’ouvrira dans une nouvelle page avec le type de retour déjà sélectionné.</p></div>
+    <button id="openFeedbackFormBtn" class="primary-button full">Ouvrir le formulaire</button>
+    <button type="button" class="secondary-button full" data-close="feedbackDialog">Plus tard</button>
+  </div>
+</dialog>
+<dialog id="supportDialog" class="sheet-dialog"><div class="modal-card info-panel centered-panel"><div class="modal-header"><div><p class="section-kicker">SOUTIEN</p><h2>Soutenir le projet</h2></div><button type="button" class="close-button" data-close="supportDialog">×</button></div><div class="large-emoji">☕</div><p>Si AidePlanning vous aide au quotidien, vous pourrez bientôt soutenir son développement.</p><p class="helper">Cette rubrique est prête pour un futur lien PayPal, Ko-fi ou Buy Me a Coffee.</p></div></dialog>
+<dialog id="whatsNewDialog" class="sheet-dialog"><div class="modal-card"><div class="modal-header"><div><p class="section-kicker">VERSION 1.1.1</p><h2>Nouveautés</h2></div><button type="button" class="close-button" data-close="whatsNewDialog">×</button></div><div class="whats-new-list"><article><span>📨</span><div><strong>Retours connectés</strong><p>Les boutons Avis, Bug, Suggestion et Contact ouvrent maintenant le bon formulaire prérempli.</p></div></article><article><span>🎨</span><div><strong>Nouvelles palettes</strong><p>Davantage de couleurs avec mode clair et sombre.</p></div></article><article><span>⚙️</span><div><strong>Réglages repensés</strong><p>Une organisation plus proche d’une application native.</p></div></article><article><span>♥</span><div><strong>Centre de retours</strong><p>Avis, bugs, idées et contact réunis au même endroit.</p></div></article><article><span>📊</span><div><strong>Statistiques enrichies</strong><p>Nouvelles moyennes et informations utiles.</p></div></article></div></div></dialog>
 
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>

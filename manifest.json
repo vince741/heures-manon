@@ -1,7 +1,7 @@
 {
-  "name": "AidePlanning",
+  "name": "AidePlanning Premium",
   "short_name": "AidePlanning",
-  "description": "Planning hors ligne personnalisable pour aide à domicile",
+  "description": "AidePlanning 1.1.1 Premium, planning hors ligne pour aide à domicile",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
