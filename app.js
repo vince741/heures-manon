@@ -19,38 +19,110 @@ function download(content,name,type){let a=document.createElement("a"),u=URL.cre
 $("csv").onclick=()=>{let r=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps trajet","Note"]];monthVisits().forEach(v=>r.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(dur(v.start,v.end)),fmt(travel(v)),v.note]));download("\ufeff"+r.map(x=>x.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),"aideplanning.csv","text/csv")};
 $("backup").onclick=()=>download(JSON.stringify(db,null,2),"aideplanning-sauvegarde.json","application/json");$("restore").onchange=async e=>{try{let x=JSON.parse(await e.target.files[0].text());if(!x.people||!x.visits)throw 0;if(confirm("Remplacer les données actuelles ?")){db=x;save();render();toast("Sauvegarde restaurée")}}catch{toast("Fichier invalide")}};
 
+
 function normalizeOcrText(text){
   return text
     .replace(/[|]/g,"I")
-    .replace(/[–—]/g,"-")
+    .replace(/[–—−]/g,"-")
+    .replace(/[’`]/g,"'")
+    .replace(/\r/g,"")
+    .trim();
+}
+function cleanOcrName(raw){
+  return raw
+    .replace(/^[^A-Za-zÀ-ÿ]*(?:M\.?|Mme|Madame|Monsieur)?\s*/i, m => m)
+    .replace(/\s+[iIlL1]$/,"")
+    .replace(/[©®•■□▪]+/g," ")
     .replace(/\s+/g," ")
     .trim();
 }
 function bestPersonMatch(raw){
-  const q=raw.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/gi," ").trim();
+  const q=raw.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/gi," ").replace(/\s+/g," ").trim();
   if(!q)return "";
   let best="",score=0;
   db.people.forEach(p=>{
-    const name=p.name.toLowerCase();
+    const name=p.name.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/gi," ");
     const words=q.split(/\s+/).filter(w=>w.length>2);
     let s=words.filter(w=>name.includes(w)).length;
-    if(name.includes(q)||q.includes(name))s+=3;
+    if(name.includes(q)||q.includes(name))s+=4;
     if(s>score){score=s;best=p.id}
   });
-  return best;
+  return score>0?best:"";
 }
-function parseOcrLines(text){
-  const lines=text.split(/\n+/).map(normalizeOcrText).filter(Boolean);
+const MONTHS_FR={
+  janvier:1,fevrier:2,février:2,mars:3,avril:4,mai:5,juin:6,
+  juillet:7,aout:8,août:8,septembre:9,octobre:10,novembre:11,decembre:12,décembre:12
+};
+function parseFrenchDate(line, fallbackDate){
+  const normalized=line.toLowerCase().replace(/[^\wà-ÿ ]/g," ").replace(/\s+/g," ");
+  const m=normalized.match(/(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)?\s*(\d{1,2})\s+([a-zà-ÿ]+)\s+(\d{4})/i);
+  if(!m)return fallbackDate;
+  const monthNum=MONTHS_FR[m[2]];
+  if(!monthNum)return fallbackDate;
+  return `${m[3]}-${pad(monthNum)}-${pad(Number(m[1]))}`;
+}
+function normalizeTimePart(value){
+  return value
+    .replace(/[oO]/g,"0")
+    .replace(/[lI|]/g,"1")
+    .replace(/[;,]/g,":")
+    .replace(/\s/g,"");
+}
+function extractTimeRange(line){
+  const normalized=normalizeTimePart(line)
+    .replace(/(\d{1,2})[hH.](\d{2})/g,"$1:$2")
+    .replace(/\bde\b/ig," ")
+    .replace(/\b[aà]\b/ig," - ")
+    .replace(/→/g,"-");
+  const m=normalized.match(/(\d{1,2}):(\d{2})\D{0,8}(\d{1,2}):(\d{2})/);
+  if(!m)return null;
+  const sh=Number(m[1]),sm=Number(m[2]),eh=Number(m[3]),em=Number(m[4]);
+  if(sh>23||eh>23||sm>59||em>59)return null;
+  return {start:`${pad(sh)}:${pad(sm)}`,end:`${pad(eh)}:${pad(em)}`};
+}
+function isNoiseLine(line){
+  const x=line.toLowerCase();
+  return !line || /planning|jour|semaine|mois|modif|choisir|fichier|analyser|photo/i.test(x)
+    || /^[iIlL1✓✔\s]+$/.test(line);
+}
+function parseOcrLines(text, fallbackDate){
+  const lines=normalizeOcrText(text).split(/\n+/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
   const rows=[];
-  const timePattern=/(\d{1,2})\s*[:hH.]\s*(\d{2})\s*(?:-|à|a|→)\s*(\d{1,2})\s*[:hH.]\s*(\d{2})/i;
-  lines.forEach(line=>{
-    const m=line.match(timePattern);
-    if(!m)return;
-    const start=`${pad(Math.min(23,Number(m[1])))}:${pad(Math.min(59,Number(m[2])))}`;
-    const end=`${pad(Math.min(23,Number(m[3])))}:${pad(Math.min(59,Number(m[4])))}`;
-    const rawName=line.replace(m[0],"").replace(/^[\s:;,-]+|[\s:;,-]+$/g,"").trim();
-    rows.push({personId:bestPersonMatch(rawName),rawName,start,end});
-  });
+  let currentDate=fallbackDate;
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    const detectedDate=parseFrenchDate(line,currentDate);
+    if(detectedDate!==currentDate || /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)/i.test(line)){
+      currentDate=detectedDate;
+      continue;
+    }
+    const range=extractTimeRange(line);
+    if(!range)continue;
+
+    let rawName="";
+    const after=line.replace(/.*?(\d{1,2})\s*[:hH.;,]\s*(\d{2}).*?(\d{1,2})\s*[:hH.;,]\s*(\d{2})/,"").trim();
+    if(after && !isNoiseLine(after))rawName=after;
+
+    if(!rawName){
+      for(let j=i+1;j<Math.min(lines.length,i+4);j++){
+        if(extractTimeRange(lines[j]))break;
+        if(parseFrenchDate(lines[j],currentDate)!==currentDate)break;
+        if(!isNoiseLine(lines[j])){
+          rawName=lines[j];
+          i=j;
+          break;
+        }
+      }
+    }
+    rawName=cleanOcrName(rawName);
+    rows.push({
+      date:currentDate,
+      personId:bestPersonMatch(rawName),
+      rawName,
+      start:range.start,
+      end:range.end
+    });
+  }
   return rows;
 }
 function personOptions(selected="",rawName=""){
@@ -61,10 +133,13 @@ function personOptions(selected="",rawName=""){
   if(rawName && !selected) opts+=`<option value="__new__" selected>Créer : ${esc(rawName)}</option>`;
   return opts;
 }
-function addOcrReviewRow(row={personId:"",rawName:"",start:"08:00",end:"09:00"}){
+function addOcrReviewRow(row={date:key(selected),personId:"",rawName:"",start:"08:00",end:"09:00"}){
   const wrap=document.createElement("div");
   wrap.className="ocr-row";
   wrap.innerHTML=`
+    <label class="ocr-date">Date
+      <input class="ocr-date-input" type="date" value="${row.date||key(selected)}" required>
+    </label>
     <label class="ocr-person">Bénéficiaire
       <select class="ocr-person-select">${personOptions(row.personId,row.rawName)}</select>
       <input class="ocr-new-name" placeholder="Nom à créer" value="${esc(row.rawName)}" ${row.personId?'hidden':''}>
@@ -109,12 +184,12 @@ $("analyzePhoto").onclick=async()=>{
         }
       }
     });
-    const rows=parseOcrLines(result.data.text||"");
+    const rows=parseOcrLines(result.data.text||"",$("photoDate").value||key(selected));
     $("ocrRows").innerHTML="";
     rows.forEach(addOcrReviewRow);
     if(!rows.length){
-      addOcrReviewRow();
-      toast("Aucune ligne certaine : saisis ou corrige manuellement.");
+      addOcrReviewRow({date:$("photoDate").value||key(selected),personId:"",rawName:"",start:"08:00",end:"09:00"});
+      toast("Aucune ligne certaine : essaie une photo plus proche et bien droite.");
     }
     $("ocrReview").hidden=false;
     $("ocrProgress").textContent=`${rows.length} ligne${rows.length>1?"s":""} détectée${rows.length>1?"s":""}.`;
@@ -126,15 +201,14 @@ $("analyzePhoto").onclick=async()=>{
     $("analyzePhoto").disabled=false;
   }
 };
-$("addOcrRow").onclick=()=>addOcrReviewRow();
+$("addOcrRow").onclick=()=>addOcrReviewRow({date:$("photoDate").value||key(selected)});
 $("importOcrRows").onclick=()=>{
-  const date=$("photoDate").value;
-  if(!date)return toast("Choisissez une date.");
   const rows=[...document.querySelectorAll(".ocr-row")];
   if(!rows.length)return toast("Aucune intervention à importer.");
-  db.visits[date]??=[];
-  let imported=0;
+  let imported=0,lastDate=null;
   for(const row of rows){
+    const date=row.querySelector(".ocr-date-input").value;
+    if(!date)continue;
     const select=row.querySelector(".ocr-person-select");
     let personId=select.value;
     if(personId==="__new__"||!personId){
@@ -149,13 +223,16 @@ $("importOcrRows").onclick=()=>{
     }
     const start=row.querySelector(".ocr-start").value,end=row.querySelector(".ocr-end").value;
     if(!start||!end)continue;
+    db.visits[date]??=[];
     db.visits[date].push({id:uid("v"),personId,start,end,travel:"00:00",note:"Importé depuis une photo"});
-    imported++;
+    imported++;lastDate=date;
   }
   save();
-  const parts=date.split("-").map(Number);
-  selected=new Date(parts[0],parts[1]-1,parts[2]);
-  month=new Date(parts[0],parts[1]-1,1);
+  if(lastDate){
+    const parts=lastDate.split("-").map(Number);
+    selected=new Date(parts[0],parts[1]-1,parts[2]);
+    month=new Date(parts[0],parts[1]-1,1);
+  }
   $("photoDlg").close();
   show("planning");
   render();

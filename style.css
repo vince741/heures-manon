@@ -7,3 +7,10 @@
 .ocr-row label{margin:0}
 .ocr-row button{padding:12px;background:#feecec;color:#dc2626}
 @media(max-width:560px){.ocr-row{grid-template-columns:1fr 1fr}.ocr-row .ocr-person{grid-column:1/-1}.ocr-row button{width:100%}}
+
+.ocr-row{grid-template-columns:1.15fr 1.7fr 1fr 1fr auto}
+.ocr-date{margin:0}
+@media(max-width:700px){
+  .ocr-row{grid-template-columns:1fr 1fr}
+  .ocr-row .ocr-date,.ocr-row .ocr-person{grid-column:1/-1}
+}

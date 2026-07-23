@@ -1,23 +1,22 @@
-AidePlanning V3 — Import par photo
+AidePlanning V4 — Lecture photo corrigée
 
-Nouveauté :
-- bouton « Importer une photo du planning »
-- lecture automatique des noms et plages horaires
-- rapprochement avec les bénéficiaires existants
-- écran de correction obligatoire
-- création possible d’un nouveau bénéficiaire depuis le résultat
-- import dans la date choisie
+Cette version est adaptée au planning montré en photo :
+- reconnaît « De 08:00 à 09:00 »
+- récupère le nom situé sur la ligne suivante
+- reconnaît les dates comme « Vendredi 24 juillet 2026 »
+- peut importer plusieurs jours visibles sur une même photo
+- affiche une date modifiable pour chaque intervention
+- vérification obligatoire avant l’import
 
-Important :
-- La reconnaissance de photo utilise Tesseract.js, une bibliothèque gratuite.
-- Une connexion Internet est nécessaire au moment de la première analyse pour charger le module OCR.
-- Le reste de l’application continue à fonctionner hors ligne.
-- La qualité dépend de la netteté, des reflets et de la présentation du planning.
-- Toujours vérifier les lignes proposées avant l’import.
+Conseils :
+- prendre la photo bien en face
+- se rapprocher pour que le texte remplisse l’image
+- éviter le reflet lumineux au centre de l’écran
+- ne pas inclure trop de bordure autour du téléphone
 
 Installation :
-1. Dézipper.
-2. Remplacer tous les fichiers du dépôt GitHub par ceux-ci.
-3. Commit changes.
-4. Attendre la publication GitHub Pages.
-5. Ouvrir l’application une fois avec Internet.
+1. Remplacer tous les fichiers du dépôt GitHub.
+2. Faire Commit changes.
+3. Attendre 1 à 3 minutes.
+4. Ouvrir l’application avec Internet.
+5. Fermer et rouvrir l’application pour charger la nouvelle version.
