@@ -198,7 +198,7 @@ $("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauv
 $("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());if(!parsed.people||!parsed.visits)throw new Error();if(confirm("Remplacer toutes les données actuelles ?")){db=parsed;save();render();toast("Sauvegarde restaurée.")}}catch{toast("Sauvegarde invalide.")}e.target.value=""};
 
 
-const FEEDBACK_ENDPOINT="https://script.google.com/macros/s/AKfycbxt_GkfUpeiDKYfY4jWr3dd1QOxVtTe9kt_ozQIoNlLt20md7Ax_aBdHvPjeUTTrWzOeA/exec";
+const FEEDBACK_ENDPOINT="https://script.google.com/macros/s/AKfycbzE9UqtjOEAfOv7DEW3uQ3hboZbz6fQYC9UxOqEXeJiR5iRFtAcy-7Tk5OiM9iBJtTZXA/exec";
 const FEEDBACK_QUEUE_KEY="aideplanning_feedback_queue_v12";
 const FEEDBACK_HISTORY_KEY="aideplanning_feedback_history_v12";
 const APP_VERSION="12.1 Premium";
