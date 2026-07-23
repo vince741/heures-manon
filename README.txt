@@ -1,27 +1,23 @@
-AidePlanning V6 — version propre
+AidePlanning V7 — thème mauve clair
 
-Fonctions :
-- calendrier mensuel
-- plusieurs interventions par jour
-- bénéficiaires enregistrés
-- temps de travail et temps de trajet
-- fiche bénéficiaire avec téléphone, carte, notes et historique
-- statistiques mensuelles et hebdomadaires
-- contrôle automatique des chevauchements d’horaires
-- export CSV
-- sauvegarde complète JSON et restauration
-- fonctionnement hors ligne
+Nouveautés :
+- correction du débordement des champs d’heure sur iPhone
+- thème clair mauve et blanc
+- nouveau sélecteur de bénéficiaires
+- onglets Récent / Tous / Nouveau
+- création rapide d’un bénéficiaire depuis une intervention
+- mémorisation automatique des 6 derniers bénéficiaires utilisés
 - aucune fonction photo
-- aucun service externe
 - aucun abonnement
+- fonctionnement hors ligne
 
-Mise à jour :
-1. Dézipper ce fichier.
+Installation :
+1. Dézipper l’archive.
 2. Remplacer tous les fichiers du dépôt GitHub.
-3. Faire Commit changes.
-4. Attendre 1 à 3 minutes.
-5. Ouvrir l’application avec Internet.
+3. Valider avec Commit changes.
+4. Attendre quelques minutes.
+5. Ouvrir l’application avec Internet une première fois.
 6. Fermer puis rouvrir l’application.
 
-Cette version essaie de reprendre automatiquement les données locales des anciennes versions.
-Par sécurité, crée une sauvegarde complète avant la mise à jour.
+Conseil :
+Crée une sauvegarde JSON depuis l’ancienne version avant la mise à jour.

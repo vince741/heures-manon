@@ -2,6 +2,9 @@ const KEY="aideplanning_v2";
 const LEGACY_KEYS=["aideplanning_v1","aideplanning_data_v1","aideplanning_v2"];
 let db=loadDatabase();
 let currentMonth=new Date(),selectedDate=new Date(),editingVisitId=null,editingPersonId=null;
+let pickerTab="recent";
+const RECENT_KEY="aideplanning_recent_people";
+let recentPeople=JSON.parse(localStorage.getItem(RECENT_KEY)||"[]");
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,"0");
@@ -132,15 +135,51 @@ function renderStats(){
   }).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
 }
 
-function fillPersonSelect(selected=""){
-  $("visitPerson").innerHTML='<option value="">Choisir une personne</option>'+[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).map(p=>`<option value="${p.id}" ${p.id===selected?"selected":""}>${esc(p.name)}</option>`).join("");
+function updateVisitPersonButton(id=""){
+  const p=person(id);
+  $("visitPerson").value=id||"";
+  $("visitPersonLabel").textContent=p?.name||"Choisir une personne";
+}
+function rememberRecentPerson(id){
+  recentPeople=[id,...recentPeople.filter(x=>x!==id)].slice(0,6);
+  localStorage.setItem(RECENT_KEY,JSON.stringify(recentPeople));
+}
+function pickerPersonButton(p){
+  return `<button type="button" class="picker-person" data-person-id="${p.id}">
+    <span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span>
+    <span aria-hidden="true">›</span>
+  </button>`;
+}
+function bindPickerButtons(){
+  document.querySelectorAll(".picker-person").forEach(b=>b.onclick=()=>{
+    const id=b.dataset.personId;
+    updateVisitPersonButton(id);
+    rememberRecentPerson(id);
+    $("personPickerDialog").close();
+  });
+}
+function renderPersonPicker(){
+  const recent=recentPeople.map(person).filter(Boolean);
+  $("pickerRecentList").innerHTML=recent.length?recent.map(pickerPersonButton).join(""):'<div class="picker-empty">Aucun bénéficiaire récent.</div>';
+  const q=$("pickerSearch").value.trim().toLowerCase();
+  const all=[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).filter(p=>(p.name+" "+(p.phone||"")).toLowerCase().includes(q));
+  $("pickerAllList").innerHTML=all.length?all.map(pickerPersonButton).join(""):'<div class="picker-empty">Aucun bénéficiaire trouvé.</div>';
+  bindPickerButtons();
+}
+function setPickerTab(tab){
+  pickerTab=tab;
+  document.querySelectorAll(".picker-tab").forEach(b=>b.classList.toggle("active",b.dataset.pickerTab===tab));
+  $("pickerRecentPanel").classList.toggle("active",tab==="recent");
+  $("pickerAllPanel").classList.toggle("active",tab==="all");
+  $("pickerNewPanel").classList.toggle("active",tab==="new");
+  if(tab==="all")setTimeout(()=>$("pickerSearch").focus(),50);
 }
 function openVisit(id=null){
   if(!db.people.length){toast("Ajoutez d’abord un bénéficiaire.");showPage("peoplePage");return}
   editingVisitId=id;
   const v=(db.visits[dateKey(selectedDate)]||[]).find(x=>x.id===id);
   $("visitDialogTitle").textContent=v?"Modifier l’intervention":"Ajouter une intervention";
-  fillPersonSelect(v?.personId||"");
+  updateVisitPersonButton(v?.personId||"");
   $("visitStart").value=v?.start||"08:00";
   $("visitEnd").value=v?.end||"09:00";
   $("visitTravel").value=v?.travel||"00:00";
@@ -195,6 +234,7 @@ $("visitForm").onsubmit=e=>{
   }else{
     db.visits[k].push({id:uid("visit"),...payload});
   }
+  rememberRecentPerson(payload.personId);
   save();$("visitDialog").close();render();
   toast(overlapPairs(db.visits[k]).length?"Enregistré, mais vérifie le chevauchement.":"Intervention enregistrée.");
 };
@@ -255,6 +295,30 @@ $("restoreInput").onchange=async e=>{
     }
   }catch{toast("Fichier de sauvegarde invalide.")}
   e.target.value="";
+};
+
+
+$("visitPersonButton").onclick=()=>{
+  renderPersonPicker();
+  setPickerTab(recentPeople.length?"recent":"all");
+  $("personPickerDialog").showModal();
+};
+$("pickerSearch").oninput=renderPersonPicker;
+document.querySelectorAll(".picker-tab").forEach(b=>b.onclick=()=>setPickerTab(b.dataset.pickerTab));
+$("quickAddPersonBtn").onclick=()=>{
+  const name=$("quickPersonName").value.trim();
+  const phone=$("quickPersonPhone").value.trim();
+  if(!name)return toast("Le nom est obligatoire.");
+  const p={id:uid("person"),name,address:"",phone,notes:""};
+  db.people.push(p);
+  save();
+  rememberRecentPerson(p.id);
+  updateVisitPersonButton(p.id);
+  $("quickPersonName").value="";
+  $("quickPersonPhone").value="";
+  $("personPickerDialog").close();
+  renderPeople();
+  toast("Bénéficiaire créé et sélectionné.");
 };
 
 if("serviceWorker"in navigator){

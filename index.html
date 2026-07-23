@@ -131,7 +131,11 @@
     </div>
 
     <label>Bénéficiaire
-      <select id="visitPerson" required></select>
+      <button id="visitPersonButton" type="button" class="picker-button">
+        <span id="visitPersonLabel">Choisir une personne</span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      <input id="visitPerson" type="hidden" required>
     </label>
 
     <div class="two-cols">
@@ -208,6 +212,44 @@
 
     <h3>Historique des interventions</h3>
     <div id="detailHistory" class="history"></div>
+  </div>
+</dialog>
+
+
+<dialog id="personPickerDialog">
+  <div class="dialog-card picker-dialog">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">BÉNÉFICIAIRE</p>
+        <h2>Choisir une personne</h2>
+      </div>
+      <button type="button" class="close-btn" data-close="personPickerDialog">×</button>
+    </div>
+
+    <div class="picker-tabs" role="tablist">
+      <button type="button" class="picker-tab active" data-picker-tab="recent">Récent</button>
+      <button type="button" class="picker-tab" data-picker-tab="all">Tous</button>
+      <button type="button" class="picker-tab" data-picker-tab="new">Nouveau</button>
+    </div>
+
+    <div id="pickerRecentPanel" class="picker-panel active">
+      <div id="pickerRecentList"></div>
+    </div>
+
+    <div id="pickerAllPanel" class="picker-panel">
+      <input id="pickerSearch" class="search" type="search" placeholder="Rechercher une personne">
+      <div id="pickerAllList"></div>
+    </div>
+
+    <div id="pickerNewPanel" class="picker-panel">
+      <label>Nom
+        <input id="quickPersonName" placeholder="Mme Martin" autocomplete="name">
+      </label>
+      <label>Téléphone
+        <input id="quickPersonPhone" type="tel" placeholder="06 12 34 56 78">
+      </label>
+      <button id="quickAddPersonBtn" type="button" class="btn primary full">Créer et sélectionner</button>
+    </div>
   </div>
 </dialog>
 
