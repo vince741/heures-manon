@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" data-theme="light">
+<html lang="fr" data-palette="rose" data-mode="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -115,82 +115,42 @@
         <h2>Plus</h2>
       </div>
 
-      <section class="panel">
-        <h3>Apparence</h3>
-        <div class="theme-switcher">
-          <button class="theme-choice active" data-theme-choice="light">
-            <span class="theme-preview light-preview"></span>
-            <span><strong>Rose clair</strong><small>Doux et lumineux</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="dark">
-            <span class="theme-preview dark-preview"></span>
-            <span><strong>Sombre</strong><small>Confortable le soir</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="lavender">
-            <span class="theme-preview lavender-preview"></span>
-            <span><strong>Lavande</strong><small>Mauve et élégant</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="ocean">
-            <span class="theme-preview ocean-preview"></span>
-            <span><strong>Océan</strong><small>Bleu frais</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="mint">
-            <span class="theme-preview mint-preview"></span>
-            <span><strong>Menthe</strong><small>Vert doux</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="sunset">
-            <span class="theme-preview sunset-preview"></span>
-            <span><strong>Coucher de soleil</strong><small>Orange et corail</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="peach">
-            <span class="theme-preview peach-preview"></span>
-            <span><strong>Pêche</strong><small>Chaleureux et clair</small></span>
-          </button>
-          <button class="theme-choice" data-theme-choice="berry">
-            <span class="theme-preview berry-preview"></span>
-            <span><strong>Baies</strong><small>Framboise et prune</small></span>
-          </button>
-        </div>
-      </section>
+      <section class="settings-group">
+        <button class="settings-row" data-open-settings="appearanceDialog">
+          <span class="settings-icon">◐</span>
+          <span class="settings-copy">
+            <strong>Apparence</strong>
+            <small id="appearanceSummary">Rose · Clair</small>
+          </span>
+          <span class="settings-chevron">›</span>
+        </button>
 
-      <section class="panel">
-        <h3>Sauvegarde et export</h3>
-        <p class="helper">Les données restent sur ce téléphone. Pense à créer régulièrement une sauvegarde complète.</p>
-        <button id="exportCsvBtn" class="primary-button full">Exporter le mois en CSV</button>
-        <button id="backupBtn" class="secondary-button full">Créer une sauvegarde complète</button>
-        <label class="secondary-button full file-button">
-          Restaurer une sauvegarde
-          <input id="restoreInput" type="file" accept=".json,application/json">
-        </label>
-      </section>
+        <button class="settings-row" data-open-settings="dataDialog">
+          <span class="settings-icon">⇩</span>
+          <span class="settings-copy">
+            <strong>Données et sauvegarde</strong>
+            <small>Export, sauvegarde et restauration</small>
+          </span>
+          <span class="settings-chevron">›</span>
+        </button>
 
-      <section class="panel info-panel">
-        <h3>Installer l’application</h3>
+        <button class="settings-row" data-open-settings="installDialog">
+          <span class="settings-icon">＋</span>
+          <span class="settings-copy">
+            <strong>Installer l’application</strong>
+            <small>Instructions pour iPhone et Android</small>
+          </span>
+          <span class="settings-chevron">›</span>
+        </button>
 
-        <p>
-          Pour utiliser AidePlanning comme une vraie application, ouvre le lien
-          dans le navigateur puis ajoute-le à l’écran d’accueil.
-        </p>
-
-        <h4>Sur iPhone</h4>
-        <p>
-          Ouvre le lien dans Safari, appuie sur le bouton Partager
-          <strong>□↑</strong>, puis choisis
-          <strong>Sur l’écran d’accueil</strong> et appuie sur
-          <strong>Ajouter</strong>.
-        </p>
-
-        <h4>Sur Android</h4>
-        <p>
-          Ouvre le lien dans Google Chrome, appuie sur le menu
-          <strong>⋮</strong>, puis choisis
-          <strong>Ajouter à l’écran d’accueil</strong> ou
-          <strong>Installer l’application</strong>.
-        </p>
-
-        <p class="helper">
-          Une fois installée, AidePlanning peut fonctionner hors ligne et sans abonnement.
-        </p>
+        <button class="settings-row" data-open-settings="aboutDialog">
+          <span class="settings-icon">i</span>
+          <span class="settings-copy">
+            <strong>À propos</strong>
+            <small>Informations sur AidePlanning</small>
+          </span>
+          <span class="settings-chevron">›</span>
+        </button>
       </section>
     </section>
   </main>
@@ -320,6 +280,127 @@
     </div>
     <h3>Historique des interventions</h3>
     <div id="detailHistory" class="history"></div>
+  </div>
+</dialog>
+
+
+<dialog id="appearanceDialog" class="sheet-dialog settings-dialog">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <p class="section-kicker">RÉGLAGES</p>
+        <h2>Apparence</h2>
+      </div>
+      <button type="button" class="close-button" data-close="appearanceDialog">×</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>Mode d’affichage</h3>
+      <div class="mode-switcher">
+        <button class="mode-choice active" data-mode-choice="light">
+          <span>☀</span>
+          <strong>Clair</strong>
+        </button>
+        <button class="mode-choice" data-mode-choice="dark">
+          <span>☾</span>
+          <strong>Sombre</strong>
+        </button>
+      </div>
+      <p class="helper">Le mode sombre s’applique à la couleur sélectionnée.</p>
+    </div>
+
+    <div class="settings-section">
+      <h3>Couleur principale</h3>
+      <div class="palette-list">
+        <button class="palette-choice active" data-palette-choice="rose">
+          <span class="palette-dot palette-rose"></span>
+          <span><strong>Rose</strong><small>Doux et lumineux</small></span>
+          <b>✓</b>
+        </button>
+        <button class="palette-choice" data-palette-choice="lavender">
+          <span class="palette-dot palette-lavender"></span>
+          <span><strong>Lavande</strong><small>Mauve et élégant</small></span>
+          <b>✓</b>
+        </button>
+        <button class="palette-choice" data-palette-choice="ocean">
+          <span class="palette-dot palette-ocean"></span>
+          <span><strong>Océan</strong><small>Bleu frais</small></span>
+          <b>✓</b>
+        </button>
+        <button class="palette-choice" data-palette-choice="mint">
+          <span class="palette-dot palette-mint"></span>
+          <span><strong>Menthe</strong><small>Vert doux</small></span>
+          <b>✓</b>
+        </button>
+        <button class="palette-choice" data-palette-choice="sunset">
+          <span class="palette-dot palette-sunset"></span>
+          <span><strong>Coucher de soleil</strong><small>Orange et corail</small></span>
+          <b>✓</b>
+        </button>
+        <button class="palette-choice" data-palette-choice="peach">
+          <span class="palette-dot palette-peach"></span>
+          <span><strong>Pêche</strong><small>Chaleureux et clair</small></span>
+          <b>✓</b>
+        </button>
+        <button class="palette-choice" data-palette-choice="berry">
+          <span class="palette-dot palette-berry"></span>
+          <span><strong>Baies</strong><small>Framboise et prune</small></span>
+          <b>✓</b>
+        </button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dataDialog" class="sheet-dialog settings-dialog">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <p class="section-kicker">RÉGLAGES</p>
+        <h2>Données et sauvegarde</h2>
+      </div>
+      <button type="button" class="close-button" data-close="dataDialog">×</button>
+    </div>
+    <p class="helper">Les données restent sur ce téléphone. Crée régulièrement une sauvegarde complète.</p>
+    <button id="exportCsvBtn" class="primary-button full">Exporter le mois en CSV</button>
+    <button id="backupBtn" class="secondary-button full">Créer une sauvegarde complète</button>
+    <label class="secondary-button full file-button">
+      Restaurer une sauvegarde
+      <input id="restoreInput" type="file" accept=".json,application/json">
+    </label>
+  </div>
+</dialog>
+
+<dialog id="installDialog" class="sheet-dialog settings-dialog">
+  <div class="modal-card info-panel">
+    <div class="modal-header">
+      <div>
+        <p class="section-kicker">INSTALLATION</p>
+        <h2>Installer l’application</h2>
+      </div>
+      <button type="button" class="close-button" data-close="installDialog">×</button>
+    </div>
+    <p>Pour utiliser AidePlanning comme une vraie application, ouvre le lien dans le navigateur puis ajoute-le à l’écran d’accueil.</p>
+    <h4>Sur iPhone</h4>
+    <p>Ouvre le lien dans Safari, appuie sur le bouton Partager <strong>□↑</strong>, choisis <strong>Sur l’écran d’accueil</strong>, puis appuie sur <strong>Ajouter</strong>.</p>
+    <h4>Sur Android</h4>
+    <p>Ouvre le lien dans Google Chrome, appuie sur le menu <strong>⋮</strong>, puis choisis <strong>Ajouter à l’écran d’accueil</strong> ou <strong>Installer l’application</strong>.</p>
+    <p class="helper">Une fois installée, AidePlanning peut fonctionner hors ligne.</p>
+  </div>
+</dialog>
+
+<dialog id="aboutDialog" class="sheet-dialog settings-dialog">
+  <div class="modal-card info-panel">
+    <div class="modal-header">
+      <div>
+        <p class="section-kicker">INFORMATIONS</p>
+        <h2>À propos</h2>
+      </div>
+      <button type="button" class="close-button" data-close="aboutDialog">×</button>
+    </div>
+    <p><strong>AidePlanning</strong> aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
+    <p>L’application fonctionne hors ligne, sans publicité et sans abonnement.</p>
+    <p class="helper">Les informations sont enregistrées localement sur l’appareil.</p>
   </div>
 </dialog>
 

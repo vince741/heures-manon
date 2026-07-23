@@ -1,6 +1,7 @@
 
 const KEY="aideplanning_v2";
-const THEME_KEY="aideplanning_theme";
+const PALETTE_KEY="aideplanning_palette";
+const MODE_KEY="aideplanning_mode";
 const RECENT_KEY="aideplanning_recent_people";
 let db=loadDatabase();
 let currentMonth=new Date(),selectedDate=new Date(),editingVisitId=null,editingPersonId=null;
@@ -145,23 +146,26 @@ function showPage(id){
   document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
   if(id==="statsPage")renderStats();if(id==="recentPage")renderRecent();
 }
-function applyTheme(theme){
-  const allowed=["light","dark","lavender","ocean","mint","sunset","peach","berry"];
-  if(!allowed.includes(theme))theme="light";
-  const themeColors={
-    light:"#ff4f8b",
-    dark:"#211c27",
-    lavender:"#8b5cf6",
-    ocean:"#2388d9",
-    mint:"#34a77b",
-    sunset:"#f97355",
-    peach:"#f39a72",
-    berry:"#cf3f7b"
-  };
-  document.documentElement.dataset.theme=theme;
-  localStorage.setItem(THEME_KEY,theme);
-  document.querySelectorAll(".theme-choice").forEach(b=>b.classList.toggle("active",b.dataset.themeChoice===theme));
-  document.querySelector('meta[name="theme-color"]').setAttribute("content",themeColors[theme]);
+const paletteNames={
+  rose:"Rose",lavender:"Lavande",ocean:"Océan",mint:"Menthe",
+  sunset:"Coucher de soleil",peach:"Pêche",berry:"Baies"
+};
+const paletteColors={
+  rose:"#ff4f8b",lavender:"#8b5cf6",ocean:"#2388d9",mint:"#34a77b",
+  sunset:"#f97355",peach:"#f39a72",berry:"#cf3f7b"
+};
+function applyAppearance(palette,mode){
+  const palettes=Object.keys(paletteNames);
+  if(!palettes.includes(palette))palette="rose";
+  if(!["light","dark"].includes(mode))mode="light";
+  document.documentElement.dataset.palette=palette;
+  document.documentElement.dataset.mode=mode;
+  localStorage.setItem(PALETTE_KEY,palette);
+  localStorage.setItem(MODE_KEY,mode);
+  document.querySelectorAll(".palette-choice").forEach(b=>b.classList.toggle("active",b.dataset.paletteChoice===palette));
+  document.querySelectorAll(".mode-choice").forEach(b=>b.classList.toggle("active",b.dataset.modeChoice===mode));
+  $("appearanceSummary").textContent=`${paletteNames[palette]} · ${mode==="dark"?"Sombre":"Clair"}`;
+  document.querySelector('meta[name="theme-color"]').setAttribute("content",mode==="dark"?"#211e27":paletteColors[palette]);
 }
 
 $("visitForm").onsubmit=e=>{
@@ -184,13 +188,23 @@ $("todayBtn").onclick=()=>{currentMonth=new Date();selectedDate=new Date();showP
 $("addVisitBtn").onclick=()=>openVisit();$("addPersonBtn").onclick=()=>openPerson();$("personSearch").oninput=renderPeople;
 document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).close());
-document.querySelectorAll(".theme-choice").forEach(b=>b.onclick=()=>applyTheme(b.dataset.themeChoice));
+document.querySelectorAll("[data-open-settings]").forEach(b=>b.onclick=()=>$(b.dataset.openSettings).showModal());
+document.querySelectorAll(".palette-choice").forEach(b=>b.onclick=()=>applyAppearance(b.dataset.paletteChoice,document.documentElement.dataset.mode));
+document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>applyAppearance(document.documentElement.dataset.palette,b.dataset.modeChoice));
 
 function download(content,name,type){const a=document.createElement("a"),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
 $("exportCsvBtn").onclick=()=>{const rows=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps de trajet","Note"]];monthVisits().sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)).forEach(v=>rows.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(duration(v.start,v.end)),fmt(visitTravel(v)),v.note||""]));download("\ufeff"+rows.map(r=>r.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),`aideplanning-${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}.csv`,"text/csv;charset=utf-8")};
 $("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauvegarde-${new Date().toISOString().slice(0,10)}.json`,"application/json");
 $("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());if(!parsed.people||!parsed.visits)throw new Error();if(confirm("Remplacer toutes les données actuelles ?")){db=parsed;save();render();toast("Sauvegarde restaurée.")}}catch{toast("Sauvegarde invalide.")}e.target.value=""};
 
-applyTheme(localStorage.getItem(THEME_KEY)||"light");
+const legacyTheme=localStorage.getItem("aideplanning_theme");
+let initialPalette=localStorage.getItem(PALETTE_KEY);
+let initialMode=localStorage.getItem(MODE_KEY);
+if(!initialPalette && legacyTheme){
+  if(legacyTheme==="dark"){initialPalette="rose";initialMode="dark"}
+  else if(legacyTheme==="light"){initialPalette="rose";initialMode="light"}
+  else{initialPalette=legacyTheme;initialMode="light"}
+}
+applyAppearance(initialPalette||"rose",initialMode||"light");
 if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
 render();

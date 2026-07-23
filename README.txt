@@ -1,26 +1,23 @@
-AidePlanning V9 — Multi-thèmes
+AidePlanning V10 — Réglages organisés
 
 Nouveautés :
-- ajout des instructions d’installation sur iPhone et Android
-- 8 thèmes au total :
-  - Rose clair
-  - Sombre
-  - Lavande
-  - Océan
-  - Menthe
-  - Coucher de soleil
-  - Pêche
-  - Baies
-- mémorisation automatique du thème choisi
-- toutes les fonctions de la V8 conservées
-- fonctionnement hors ligne
-- conservation des données locales existantes
+- onglet Plus compact, organisé comme les Réglages d’un téléphone
+- rubriques séparées :
+  - Apparence
+  - Données et sauvegarde
+  - Installer l’application
+  - À propos
+- choix de la couleur indépendant du mode d’affichage
+- mode Clair ou Sombre applicable à chaque palette
+- palettes disponibles :
+  Rose, Lavande, Océan, Menthe, Coucher de soleil, Pêche et Baies
+- reprise automatique de l’ancien thème
+- toutes les fonctions précédentes conservées
 
 Installation :
-1. Créer une sauvegarde JSON de la version actuelle.
+1. Créer une sauvegarde JSON.
 2. Dézipper l’archive.
 3. Remplacer tous les fichiers du dépôt GitHub.
 4. Faire Commit changes.
-5. Attendre quelques minutes.
-6. Ouvrir l’application une première fois avec Internet.
-7. Fermer puis relancer l’application.
+5. Ouvrir l’application une fois avec Internet.
+6. Fermer puis relancer l’application.
