@@ -146,10 +146,22 @@ function showPage(id){
   if(id==="statsPage")renderStats();if(id==="recentPage")renderRecent();
 }
 function applyTheme(theme){
+  const allowed=["light","dark","lavender","ocean","mint","sunset","peach","berry"];
+  if(!allowed.includes(theme))theme="light";
+  const themeColors={
+    light:"#ff4f8b",
+    dark:"#211c27",
+    lavender:"#8b5cf6",
+    ocean:"#2388d9",
+    mint:"#34a77b",
+    sunset:"#f97355",
+    peach:"#f39a72",
+    berry:"#cf3f7b"
+  };
   document.documentElement.dataset.theme=theme;
   localStorage.setItem(THEME_KEY,theme);
   document.querySelectorAll(".theme-choice").forEach(b=>b.classList.toggle("active",b.dataset.themeChoice===theme));
-  document.querySelector('meta[name="theme-color"]').setAttribute("content",theme==="dark"?"#211c27":"#ff4f8b");
+  document.querySelector('meta[name="theme-color"]').setAttribute("content",themeColors[theme]);
 }
 
 $("visitForm").onsubmit=e=>{
