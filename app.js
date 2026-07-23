@@ -1,9 +1,9 @@
+
 const KEY="aideplanning_v2";
-const LEGACY_KEYS=["aideplanning_v1","aideplanning_data_v1","aideplanning_v2"];
+const THEME_KEY="aideplanning_theme";
+const RECENT_KEY="aideplanning_recent_people";
 let db=loadDatabase();
 let currentMonth=new Date(),selectedDate=new Date(),editingVisitId=null,editingPersonId=null;
-let pickerTab="recent";
-const RECENT_KEY="aideplanning_recent_people";
 let recentPeople=JSON.parse(localStorage.getItem(RECENT_KEY)||"[]");
 
 const $=id=>document.getElementById(id);
@@ -17,12 +17,11 @@ const fmt=m=>`${Math.floor(m/60)}h${pad(m%60)}`;
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 function loadDatabase(){
-  for(const key of LEGACY_KEYS){
+  for(const key of ["aideplanning_v2","aideplanning_v1","aideplanning_data_v1"]){
     try{
       const parsed=JSON.parse(localStorage.getItem(key)||"null");
       if(parsed&&Array.isArray(parsed.people)&&parsed.visits&&typeof parsed.visits==="object"){
-        localStorage.setItem(KEY,JSON.stringify(parsed));
-        return parsed;
+        localStorage.setItem(KEY,JSON.stringify(parsed));return parsed;
       }
     }catch{}
   }
@@ -35,293 +34,151 @@ function monthVisits(){return Object.entries(db.visits).filter(([d])=>d.startsWi
 function visitTravel(v){return parseTime(v.travel||"00:00")}
 function orderedVisits(date){return [...(db.visits[date]||[])].sort((a,b)=>a.start.localeCompare(b.start))}
 function overlapPairs(visits){
-  const sorted=[...visits].sort((a,b)=>a.start.localeCompare(b.start));
-  const pairs=[];
-  for(let i=0;i<sorted.length-1;i++){
-    const current=sorted[i],next=sorted[i+1];
-    if(parseTime(next.start)<parseTime(current.end))pairs.push([current,next]);
-  }
+  const sorted=[...visits].sort((a,b)=>a.start.localeCompare(b.start)),pairs=[];
+  for(let i=0;i<sorted.length-1;i++)if(parseTime(sorted[i+1].start)<parseTime(sorted[i].end))pairs.push([sorted[i],sorted[i+1]]);
   return pairs;
-}
-function render(){renderCalendar();renderDay();renderPeople();renderStats()}
-
-function renderCalendar(){
-  const y=currentMonth.getFullYear(),m=currentMonth.getMonth(),mv=monthVisits();
-  const work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
-  $("monthTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
-  $("monthInfo").textContent=`${mv.length} visite${mv.length>1?"s":""} · ${fmt(work)} travail · ${fmt(travel)} trajet`;
-  $("calendar").innerHTML="";
-  const offset=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate();
-
-  for(let i=0;i<offset;i++){
-    const b=document.createElement("button");b.className="day empty";b.disabled=true;$("calendar").appendChild(b);
-  }
-
-  for(let d=1;d<=days;d++){
-    const dt=new Date(y,m,d),k=dateKey(dt),visits=orderedVisits(k);
-    const workDay=visits.reduce((s,v)=>s+duration(v.start,v.end),0);
-    const b=document.createElement("button");
-    b.className="day"+(k===dateKey(new Date())?" today":"")+(k===dateKey(selectedDate)?" selected":"")+(visits.length?" has":"")+(overlapPairs(visits).length?" warning":"");
-    b.innerHTML=`<b>${d}</b><span class="day-meta">${visits.length?`${visits.length} visite${visits.length>1?"s":""}<br>${fmt(workDay)}`:""}</span>`;
-    b.onclick=()=>{selectedDate=dt;render()};
-    $("calendar").appendChild(b);
-  }
-}
-
-function renderDay(){
-  const visits=orderedVisits(dateKey(selectedDate));
-  const work=visits.reduce((s,v)=>s+duration(v.start,v.end),0),travel=visits.reduce((s,v)=>s+visitTravel(v),0);
-  $("selectedDateTitle").textContent=selectedDate.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
-  $("dayWorkTotal").textContent=fmt(work);
-  $("dayTravelTotal").textContent=`Trajet ${fmt(travel)}`;
-
-  const overlaps=overlapPairs(visits);
-  $("dayWarnings").innerHTML=overlaps.length?`<div class="warning-box">⚠️ ${overlaps.length} chevauchement${overlaps.length>1?"s":""} d’horaires détecté${overlaps.length>1?"s":""}.</div>`:"";
-
-  const list=$("visitsList");list.innerHTML="";
-  if(!visits.length){
-    list.innerHTML='<div class="empty-state">Aucune intervention pour cette journée.</div>';
-    return;
-  }
-
-  visits.forEach(v=>{
-    const p=person(v.personId),b=document.createElement("button");b.className="visit-card";
-    b.innerHTML=`<div><h3>${esc(p?.name||"Personne supprimée")}</h3><div class="visit-time">${v.start} → ${v.end}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong><span>Trajet ${fmt(visitTravel(v))}</span></div>`;
-    b.onclick=()=>openVisit(v.id);
-    list.appendChild(b);
-  });
-}
-
-function renderPeople(){
-  const q=$("personSearch").value.trim().toLowerCase(),list=$("peopleList");list.innerHTML="";
-  const filtered=[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).filter(p=>(p.name+" "+(p.address||"")+" "+(p.phone||"")).toLowerCase().includes(q));
-
-  if(!filtered.length){
-    list.innerHTML='<div class="card empty-state">Aucun bénéficiaire enregistré.</div>';
-    return;
-  }
-
-  filtered.forEach(p=>{
-    const all=Object.entries(db.visits).flatMap(([date,v])=>v.filter(x=>x.personId===p.id).map(x=>({...x,date})));
-    const work=all.reduce((s,v)=>s+duration(v.start,v.end),0),card=document.createElement("article");card.className="person-card";
-    card.innerHTML=`<h3>${esc(p.name)}</h3><div class="person-meta">${p.address?`📍 ${esc(p.address)}<br>`:""}${p.phone?`📞 ${esc(p.phone)}<br>`:""}${all.length} intervention${all.length>1?"s":""} · ${fmt(work)}</div><div class="person-actions"><button class="mini detail">Voir la fiche</button><button class="mini edit">Modifier</button></div>`;
-    card.querySelector(".detail").onclick=()=>openPersonDetail(p.id);
-    card.querySelector(".edit").onclick=()=>openPerson(p.id);
-    list.appendChild(card);
-  });
-}
-
-function mondayOf(date){
-  const d=new Date(date);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(12,0,0,0);return d;
-}
-function renderStats(){
-  const mv=monthVisits(),work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
-  $("statsTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
-  $("statWork").textContent=fmt(work);$("statTravel").textContent=fmt(travel);$("statVisits").textContent=mv.length;$("statDays").textContent=new Set(mv.map(v=>v.date)).size;
-
-  const totals={};mv.forEach(v=>{totals[v.personId]=(totals[v.personId]||0)+duration(v.start,v.end)});
-  $("personStats").innerHTML=Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([id,m])=>`<div class="person-stat"><span>${esc(person(id)?.name||"Personne supprimée")}</span><strong>${fmt(m)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
-
-  const weeks={};
-  mv.forEach(v=>{
-    const monday=mondayOf(new Date(v.date+"T12:00:00"));
-    const k=dateKey(monday);
-    weeks[k]??={work:0,travel:0,visits:0};
-    weeks[k].work+=duration(v.start,v.end);weeks[k].travel+=visitTravel(v);weeks[k].visits++;
-  });
-  $("weekStats").innerHTML=Object.entries(weeks).sort().map(([k,w])=>{
-    const d=new Date(k+"T12:00:00");
-    return `<div class="week-stat"><span>Semaine du ${d.toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span><strong>${fmt(w.work)} + ${fmt(w.travel)} trajet</strong></div>`;
-  }).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
-}
-
-function updateVisitPersonButton(id=""){
-  const p=person(id);
-  $("visitPerson").value=id||"";
-  $("visitPersonLabel").textContent=p?.name||"Choisir une personne";
 }
 function rememberRecentPerson(id){
   recentPeople=[id,...recentPeople.filter(x=>x!==id)].slice(0,6);
   localStorage.setItem(RECENT_KEY,JSON.stringify(recentPeople));
 }
-function pickerPersonButton(p){
-  return `<button type="button" class="picker-person" data-person-id="${p.id}">
-    <span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span>
-    <span aria-hidden="true">›</span>
-  </button>`;
+function render(){renderCalendar();renderDay();renderPeople();renderStats();renderRecent()}
+
+function renderCalendar(){
+  const y=currentMonth.getFullYear(),m=currentMonth.getMonth(),mv=monthVisits();
+  const work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
+  $("monthTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  $("monthInfo").textContent=`${mv.length} visite${mv.length>1?"s":""} · ${fmt(work)} travaillé · ${fmt(travel)} trajet`;
+  $("calendar").innerHTML="";
+  const offset=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate();
+  for(let i=0;i<offset;i++){const b=document.createElement("button");b.className="day empty";b.disabled=true;$("calendar").appendChild(b)}
+  for(let d=1;d<=days;d++){
+    const dt=new Date(y,m,d),k=dateKey(dt),visits=orderedVisits(k),workDay=visits.reduce((s,v)=>s+duration(v.start,v.end),0);
+    const b=document.createElement("button");
+    b.className="day"+(k===dateKey(new Date())?" today":"")+(k===dateKey(selectedDate)?" selected":"")+(visits.length?" has":"")+(overlapPairs(visits).length?" warning":"");
+    b.innerHTML=`<b>${d}</b><span class="day-meta">${visits.length?`${visits.length} visite${visits.length>1?"s":""}<br>${fmt(workDay)}`:""}</span>`;
+    b.onclick=()=>{selectedDate=dt;render()};$("calendar").appendChild(b);
+  }
 }
-function bindPickerButtons(){
-  document.querySelectorAll(".picker-person").forEach(b=>b.onclick=()=>{
-    const id=b.dataset.personId;
-    updateVisitPersonButton(id);
-    rememberRecentPerson(id);
-    $("personPickerDialog").close();
+function renderDay(){
+  const visits=orderedVisits(dateKey(selectedDate)),work=visits.reduce((s,v)=>s+duration(v.start,v.end),0),travel=visits.reduce((s,v)=>s+visitTravel(v),0);
+  $("selectedDateTitle").textContent=selectedDate.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  $("dayWorkTotal").textContent=fmt(work);$("dayTravelTotal").textContent=`Trajet ${fmt(travel)}`;
+  const overlaps=overlapPairs(visits);
+  $("dayWarnings").innerHTML=overlaps.length?`<div class="warning-box">⚠️ ${overlaps.length} chevauchement${overlaps.length>1?"s":""} détecté${overlaps.length>1?"s":""}.</div>`:"";
+  const list=$("visitsList");list.innerHTML="";
+  if(!visits.length){list.innerHTML='<div class="empty-state">Aucune intervention pour cette journée.</div>';return}
+  visits.forEach(v=>{
+    const p=person(v.personId),b=document.createElement("button");b.className="visit-card";
+    b.innerHTML=`<div><h3>${esc(p?.name||"Personne supprimée")}</h3><div class="visit-time">${v.start} → ${v.end}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong><span>Trajet ${fmt(visitTravel(v))}</span></div>`;
+    b.onclick=()=>openVisit(v.id);list.appendChild(b);
   });
 }
+function renderPeople(){
+  const q=$("personSearch").value.trim().toLowerCase(),list=$("peopleList");list.innerHTML="";
+  const filtered=[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).filter(p=>(p.name+" "+(p.address||"")+" "+(p.phone||"")).toLowerCase().includes(q));
+  if(!filtered.length){list.innerHTML='<div class="panel empty-state">Aucun bénéficiaire enregistré.</div>';return}
+  filtered.forEach(p=>{
+    const all=Object.entries(db.visits).flatMap(([date,v])=>v.filter(x=>x.personId===p.id).map(x=>({...x,date})));
+    const card=document.createElement("article");card.className="person-card";
+    card.innerHTML=`<h3>${esc(p.name)}</h3><div class="person-meta">${p.address?`📍 ${esc(p.address)}<br>`:""}${p.phone?`📞 ${esc(p.phone)}<br>`:""}${all.length} intervention${all.length>1?"s":""} · ${fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0))}</div><div class="person-actions"><button class="mini-button detail">Voir la fiche</button><button class="mini-button edit">Modifier</button></div>`;
+    card.querySelector(".detail").onclick=()=>openPersonDetail(p.id);card.querySelector(".edit").onclick=()=>openPerson(p.id);list.appendChild(card);
+  });
+}
+function mondayOf(date){const d=new Date(date),day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(12,0,0,0);return d}
+function renderStats(){
+  const mv=monthVisits(),work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
+  $("statsTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  $("statWork").textContent=fmt(work);$("statTravel").textContent=fmt(travel);$("statVisits").textContent=mv.length;$("statDays").textContent=new Set(mv.map(v=>v.date)).size;
+  const totals={};mv.forEach(v=>totals[v.personId]=(totals[v.personId]||0)+duration(v.start,v.end));
+  $("personStats").innerHTML=Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([id,m])=>`<div class="person-stat"><span>${esc(person(id)?.name||"Personne supprimée")}</span><strong>${fmt(m)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
+  const weeks={};mv.forEach(v=>{const k=dateKey(mondayOf(new Date(v.date+"T12:00:00")));weeks[k]??={work:0,travel:0};weeks[k].work+=duration(v.start,v.end);weeks[k].travel+=visitTravel(v)});
+  $("weekStats").innerHTML=Object.entries(weeks).sort().map(([k,w])=>`<div class="week-stat"><span>Semaine du ${new Date(k+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span><strong>${fmt(w.work)} + ${fmt(w.travel)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
+}
+function renderRecent(){
+  const recent=recentPeople.map(person).filter(Boolean);
+  $("recentPeopleList").innerHTML=recent.length?recent.map(p=>`<button class="picker-person recent-person" data-person-id="${p.id}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`).join(""):'<div class="empty-state">Aucun bénéficiaire récent.</div>';
+  document.querySelectorAll(".recent-person").forEach(b=>b.onclick=()=>openPersonDetail(b.dataset.personId));
+  const all=Object.entries(db.visits).flatMap(([date,v])=>v.map(x=>({...x,date}))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start)).slice(0,8);
+  $("recentVisitsList").innerHTML=all.length?all.map(v=>`<button class="visit-card recent-visit" data-date="${v.date}" data-id="${v.id}"><div><h3>${esc(person(v.personId)?.name||"Personne supprimée")}</h3><div class="visit-time">${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} · ${v.start} → ${v.end}</div></div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong></div></button>`).join(""):'<div class="empty-state">Aucune intervention récente.</div>';
+  document.querySelectorAll(".recent-visit").forEach(b=>b.onclick=()=>{selectedDate=new Date(b.dataset.date+"T12:00:00");currentMonth=new Date(selectedDate);showPage("planningPage");render();setTimeout(()=>openVisit(b.dataset.id),50)});
+}
+function updateVisitPersonButton(id=""){const p=person(id);$("visitPerson").value=id||"";$("visitPersonLabel").textContent=p?.name||"Choisir une personne"}
+function pickerPersonButton(p){return `<button type="button" class="picker-person" data-person-id="${p.id}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`}
+function bindPickerButtons(){document.querySelectorAll("#personPickerDialog .picker-person").forEach(b=>b.onclick=()=>{updateVisitPersonButton(b.dataset.personId);rememberRecentPerson(b.dataset.personId);$("personPickerDialog").close()})}
 function renderPersonPicker(){
   const recent=recentPeople.map(person).filter(Boolean);
-  $("pickerRecentList").innerHTML=recent.length?recent.map(pickerPersonButton).join(""):'<div class="picker-empty">Aucun bénéficiaire récent.</div>';
+  $("pickerRecentList").innerHTML=recent.length?recent.map(pickerPersonButton).join(""):'<div class="empty-state">Aucun bénéficiaire récent.</div>';
   const q=$("pickerSearch").value.trim().toLowerCase();
   const all=[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).filter(p=>(p.name+" "+(p.phone||"")).toLowerCase().includes(q));
-  $("pickerAllList").innerHTML=all.length?all.map(pickerPersonButton).join(""):'<div class="picker-empty">Aucun bénéficiaire trouvé.</div>';
+  $("pickerAllList").innerHTML=all.length?all.map(pickerPersonButton).join(""):'<div class="empty-state">Aucun bénéficiaire trouvé.</div>';
   bindPickerButtons();
 }
 function setPickerTab(tab){
-  pickerTab=tab;
-  document.querySelectorAll(".picker-tab").forEach(b=>b.classList.toggle("active",b.dataset.pickerTab===tab));
-  $("pickerRecentPanel").classList.toggle("active",tab==="recent");
-  $("pickerAllPanel").classList.toggle("active",tab==="all");
-  $("pickerNewPanel").classList.toggle("active",tab==="new");
-  if(tab==="all")setTimeout(()=>$("pickerSearch").focus(),50);
+  document.querySelectorAll(".segment").forEach(b=>b.classList.toggle("active",b.dataset.pickerTab===tab));
+  $("pickerRecentPanel").classList.toggle("active",tab==="recent");$("pickerAllPanel").classList.toggle("active",tab==="all");$("pickerNewPanel").classList.toggle("active",tab==="new");
 }
 function openVisit(id=null){
-  if(!db.people.length){toast("Ajoutez d’abord un bénéficiaire.");showPage("peoplePage");return}
-  editingVisitId=id;
-  const v=(db.visits[dateKey(selectedDate)]||[]).find(x=>x.id===id);
+  if(!db.people.length){toast("Ajoute d’abord un bénéficiaire.");showPage("peoplePage");return}
+  editingVisitId=id;const v=(db.visits[dateKey(selectedDate)]||[]).find(x=>x.id===id);
   $("visitDialogTitle").textContent=v?"Modifier l’intervention":"Ajouter une intervention";
-  updateVisitPersonButton(v?.personId||"");
-  $("visitStart").value=v?.start||"08:00";
-  $("visitEnd").value=v?.end||"09:00";
-  $("visitTravel").value=v?.travel||"00:00";
-  $("visitNote").value=v?.note||"";
-  $("deleteVisitBtn").style.display=v?"block":"none";
-  $("visitDialog").showModal();
+  updateVisitPersonButton(v?.personId||"");$("visitStart").value=v?.start||"08:00";$("visitEnd").value=v?.end||"09:00";$("visitTravel").value=v?.travel||"00:00";$("visitNote").value=v?.note||"";
+  $("deleteVisitBtn").style.display=v?"block":"none";$("visitDialog").showModal();
 }
 function openPerson(id=null){
-  editingPersonId=id;
-  const p=person(id);
+  editingPersonId=id;const p=person(id);
   $("personDialogTitle").textContent=p?"Modifier le bénéficiaire":"Ajouter un bénéficiaire";
-  $("personName").value=p?.name||"";
-  $("personAddress").value=p?.address||"";
-  $("personPhone").value=p?.phone||"";
-  $("personNotes").value=p?.notes||"";
-  $("deletePersonBtn").style.display=p?"block":"none";
-  $("personDialog").showModal();
+  $("personName").value=p?.name||"";$("personAddress").value=p?.address||"";$("personPhone").value=p?.phone||"";$("personNotes").value=p?.notes||"";
+  $("deletePersonBtn").style.display=p?"block":"none";$("personDialog").showModal();
 }
 function openPersonDetail(id){
   const p=person(id);if(!p)return;
   const all=Object.entries(db.visits).flatMap(([date,v])=>v.filter(x=>x.personId===id).map(x=>({...x,date}))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start));
   $("detailName").textContent=p.name;
-  $("detailContact").innerHTML=`${p.address?`<div>📍 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}" target="_blank" rel="noopener">${esc(p.address)}</a></div>`:""}${p.phone?`<div>📞 <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a></div>`:""}${p.notes?`<div>📝 ${esc(p.notes)}</div>`:""}`;
-  $("detailWork").textContent=fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0));
-  $("detailTravel").textContent=fmt(all.reduce((s,v)=>s+visitTravel(v),0));
-  $("detailVisits").textContent=all.length;
-  $("detailHistory").innerHTML=all.map(v=>`<div class="history-item"><div class="row"><strong>${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}</strong><span>${fmt(duration(v.start,v.end))}</span></div><div>${v.start} → ${v.end} · trajet ${fmt(visitTravel(v))}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div>`).join("")||'<div class="empty-state">Aucune intervention enregistrée.</div>';
+  $("detailContact").innerHTML=`${p.address?`<div>📍 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}" target="_blank">${esc(p.address)}</a></div>`:""}${p.phone?`<div>📞 <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a></div>`:""}${p.notes?`<div>📝 ${esc(p.notes)}</div>`:""}`;
+  $("detailWork").textContent=fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0));$("detailTravel").textContent=fmt(all.reduce((s,v)=>s+visitTravel(v),0));$("detailVisits").textContent=all.length;
+  $("detailHistory").innerHTML=all.map(v=>`<div class="history-item"><div class="row"><strong>${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}</strong><span>${fmt(duration(v.start,v.end))}</span></div><div>${v.start} → ${v.end} · trajet ${fmt(visitTravel(v))}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div>`).join("")||'<div class="empty-state">Aucune intervention.</div>';
   $("personDetailDialog").showModal();
 }
 function showPage(id){
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id===id));
-  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
-  if(id==="statsPage")renderStats();
+  document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  if(id==="statsPage")renderStats();if(id==="recentPage")renderRecent();
+}
+function applyTheme(theme){
+  document.documentElement.dataset.theme=theme;
+  localStorage.setItem(THEME_KEY,theme);
+  document.querySelectorAll(".theme-choice").forEach(b=>b.classList.toggle("active",b.dataset.themeChoice===theme));
+  document.querySelector('meta[name="theme-color"]').setAttribute("content",theme==="dark"?"#211c27":"#ff4f8b");
 }
 
 $("visitForm").onsubmit=e=>{
-  e.preventDefault();
-  const k=dateKey(selectedDate),payload={
-    personId:$("visitPerson").value,
-    start:$("visitStart").value,
-    end:$("visitEnd").value,
-    travel:$("visitTravel").value||"00:00",
-    note:$("visitNote").value.trim()
-  };
-  if(!payload.personId)return toast("Choisissez un bénéficiaire.");
-  if(duration(payload.start,payload.end)<=0)return toast("Les horaires sont invalides.");
-
+  e.preventDefault();const k=dateKey(selectedDate),payload={personId:$("visitPerson").value,start:$("visitStart").value,end:$("visitEnd").value,travel:$("visitTravel").value||"00:00",note:$("visitNote").value.trim()};
+  if(!payload.personId)return toast("Choisis un bénéficiaire.");if(duration(payload.start,payload.end)<=0)return toast("Les horaires sont invalides.");
   db.visits[k]??=[];
-  if(editingVisitId){
-    const i=db.visits[k].findIndex(v=>v.id===editingVisitId);
-    db.visits[k][i]={...db.visits[k][i],...payload};
-  }else{
-    db.visits[k].push({id:uid("visit"),...payload});
-  }
-  rememberRecentPerson(payload.personId);
-  save();$("visitDialog").close();render();
-  toast(overlapPairs(db.visits[k]).length?"Enregistré, mais vérifie le chevauchement.":"Intervention enregistrée.");
+  if(editingVisitId){const i=db.visits[k].findIndex(v=>v.id===editingVisitId);db.visits[k][i]={...db.visits[k][i],...payload}}else db.visits[k].push({id:uid("visit"),...payload});
+  rememberRecentPerson(payload.personId);save();$("visitDialog").close();render();toast("Intervention enregistrée.");
 };
-
-$("deleteVisitBtn").onclick=()=>{
-  const k=dateKey(selectedDate);
-  db.visits[k]=(db.visits[k]||[]).filter(v=>v.id!==editingVisitId);
-  if(!db.visits[k].length)delete db.visits[k];
-  save();$("visitDialog").close();render();toast("Intervention supprimée.");
-};
-
-$("personForm").onsubmit=e=>{
-  e.preventDefault();
-  const payload={name:$("personName").value.trim(),address:$("personAddress").value.trim(),phone:$("personPhone").value.trim(),notes:$("personNotes").value.trim()};
-  if(!payload.name)return toast("Le nom est obligatoire.");
-  if(editingPersonId){
-    const i=db.people.findIndex(p=>p.id===editingPersonId);db.people[i]={...db.people[i],...payload};
-  }else{
-    db.people.push({id:uid("person"),...payload});
-  }
-  save();$("personDialog").close();render();toast("Bénéficiaire enregistré.");
-};
-
-$("deletePersonBtn").onclick=()=>{
-  const count=Object.values(db.visits).flat().filter(v=>v.personId===editingPersonId).length;
-  const message=count?`Cette personne possède ${count} intervention${count>1?"s":""}. Tout supprimer ?`:"Supprimer cette personne ?";
-  if(!confirm(message))return;
-  db.people=db.people.filter(p=>p.id!==editingPersonId);
-  Object.keys(db.visits).forEach(k=>{db.visits[k]=db.visits[k].filter(v=>v.personId!==editingPersonId);if(!db.visits[k].length)delete db.visits[k]});
-  save();$("personDialog").close();render();toast("Bénéficiaire supprimé.");
-};
-
+$("deleteVisitBtn").onclick=()=>{const k=dateKey(selectedDate);db.visits[k]=(db.visits[k]||[]).filter(v=>v.id!==editingVisitId);if(!db.visits[k].length)delete db.visits[k];save();$("visitDialog").close();render();toast("Intervention supprimée.")};
+$("personForm").onsubmit=e=>{e.preventDefault();const payload={name:$("personName").value.trim(),address:$("personAddress").value.trim(),phone:$("personPhone").value.trim(),notes:$("personNotes").value.trim()};if(!payload.name)return toast("Le nom est obligatoire.");if(editingPersonId){const i=db.people.findIndex(p=>p.id===editingPersonId);db.people[i]={...db.people[i],...payload}}else db.people.push({id:uid("person"),...payload});save();$("personDialog").close();render();toast("Bénéficiaire enregistré.")};
+$("deletePersonBtn").onclick=()=>{if(!confirm("Supprimer ce bénéficiaire et ses interventions ?"))return;db.people=db.people.filter(p=>p.id!==editingPersonId);Object.keys(db.visits).forEach(k=>{db.visits[k]=db.visits[k].filter(v=>v.personId!==editingPersonId);if(!db.visits[k].length)delete db.visits[k]});save();$("personDialog").close();render();toast("Bénéficiaire supprimé.")};
+$("visitPersonButton").onclick=()=>{renderPersonPicker();setPickerTab(recentPeople.length?"recent":"all");$("personPickerDialog").showModal()};
+$("pickerSearch").oninput=renderPersonPicker;
+document.querySelectorAll(".segment").forEach(b=>b.onclick=()=>setPickerTab(b.dataset.pickerTab));
+$("quickAddPersonBtn").onclick=()=>{const name=$("quickPersonName").value.trim(),phone=$("quickPersonPhone").value.trim();if(!name)return toast("Le nom est obligatoire.");const p={id:uid("person"),name,address:"",phone,notes:""};db.people.push(p);save();rememberRecentPerson(p.id);updateVisitPersonButton(p.id);$("quickPersonName").value="";$("quickPersonPhone").value="";$("personPickerDialog").close();render();toast("Bénéficiaire créé.")};
 $("prevMonth").onclick=()=>{currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()-1,1);selectedDate=new Date(currentMonth);render()};
 $("nextMonth").onclick=()=>{currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()+1,1);selectedDate=new Date(currentMonth);render()};
 $("todayBtn").onclick=()=>{currentMonth=new Date();selectedDate=new Date();showPage("planningPage");render()};
-$("addVisitBtn").onclick=()=>openVisit();
-$("addPersonBtn").onclick=()=>openPerson();
-$("personSearch").oninput=renderPeople;
-document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+$("addVisitBtn").onclick=()=>openVisit();$("addPersonBtn").onclick=()=>openPerson();$("personSearch").oninput=renderPeople;
+document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>$(b.dataset.close).close());
+document.querySelectorAll(".theme-choice").forEach(b=>b.onclick=()=>applyTheme(b.dataset.themeChoice));
 
-function download(content,name,type){
-  const a=document.createElement("a"),url=URL.createObjectURL(new Blob([content],{type}));
-  a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);
-}
-$("exportCsvBtn").onclick=()=>{
-  const rows=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps de trajet","Note"]];
-  monthVisits().sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)).forEach(v=>rows.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(duration(v.start,v.end)),fmt(visitTravel(v)),v.note||""]));
-  download("\ufeff"+rows.map(r=>r.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),`aideplanning-${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}.csv`,"text/csv;charset=utf-8");
-};
+function download(content,name,type){const a=document.createElement("a"),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+$("exportCsvBtn").onclick=()=>{const rows=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps de trajet","Note"]];monthVisits().sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)).forEach(v=>rows.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(duration(v.start,v.end)),fmt(visitTravel(v)),v.note||""]));download("\ufeff"+rows.map(r=>r.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),`aideplanning-${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}.csv`,"text/csv;charset=utf-8")};
 $("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauvegarde-${new Date().toISOString().slice(0,10)}.json`,"application/json");
-$("restoreInput").onchange=async e=>{
-  try{
-    const parsed=JSON.parse(await e.target.files[0].text());
-    if(!parsed.people||!parsed.visits)throw new Error();
-    if(confirm("Remplacer toutes les données actuelles par cette sauvegarde ?")){
-      db=parsed;save();render();toast("Sauvegarde restaurée.");
-    }
-  }catch{toast("Fichier de sauvegarde invalide.")}
-  e.target.value="";
-};
+$("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());if(!parsed.people||!parsed.visits)throw new Error();if(confirm("Remplacer toutes les données actuelles ?")){db=parsed;save();render();toast("Sauvegarde restaurée.")}}catch{toast("Sauvegarde invalide.")}e.target.value=""};
 
-
-$("visitPersonButton").onclick=()=>{
-  renderPersonPicker();
-  setPickerTab(recentPeople.length?"recent":"all");
-  $("personPickerDialog").showModal();
-};
-$("pickerSearch").oninput=renderPersonPicker;
-document.querySelectorAll(".picker-tab").forEach(b=>b.onclick=()=>setPickerTab(b.dataset.pickerTab));
-$("quickAddPersonBtn").onclick=()=>{
-  const name=$("quickPersonName").value.trim();
-  const phone=$("quickPersonPhone").value.trim();
-  if(!name)return toast("Le nom est obligatoire.");
-  const p={id:uid("person"),name,address:"",phone,notes:""};
-  db.people.push(p);
-  save();
-  rememberRecentPerson(p.id);
-  updateVisitPersonButton(p.id);
-  $("quickPersonName").value="";
-  $("quickPersonPhone").value="";
-  $("personPickerDialog").close();
-  renderPeople();
-  toast("Bénéficiaire créé et sélectionné.");
-};
-
-if("serviceWorker"in navigator){
-  addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
-}
+applyTheme(localStorage.getItem(THEME_KEY)||"light");
+if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
 render();

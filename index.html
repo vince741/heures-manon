@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#1d4ed8">
+  <meta name="theme-color" content="#ff4f8b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="description" content="Planning hors ligne pour aide à domicile">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>AidePlanning</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg">
@@ -14,222 +14,208 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app">
-  <header class="header">
+<div class="app-shell">
+  <header class="topbar">
     <div>
-      <p class="eyebrow">AIDE À DOMICILE</p>
+      <p class="brand-kicker">AIDE À DOMICILE</p>
       <h1>AidePlanning</h1>
     </div>
-    <button id="todayBtn" class="chip">Aujourd’hui</button>
+    <button id="todayBtn" class="top-action">Aujourd’hui</button>
   </header>
 
   <main>
     <section id="planningPage" class="page active">
-      <div class="card month-card">
-        <button id="prevMonth" class="round" aria-label="Mois précédent">‹</button>
-        <div class="month-center">
+      <div class="month-header">
+        <button id="prevMonth" class="icon-button" aria-label="Mois précédent">‹</button>
+        <div>
           <h2 id="monthTitle"></h2>
           <p id="monthInfo"></p>
         </div>
-        <button id="nextMonth" class="round" aria-label="Mois suivant">›</button>
+        <button id="nextMonth" class="icon-button" aria-label="Mois suivant">›</button>
       </div>
 
-      <div class="card">
+      <section class="panel calendar-panel">
         <div class="weekdays">
           <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
         </div>
         <div id="calendar" class="calendar"></div>
-      </div>
+      </section>
 
-      <div class="card">
-        <div class="section-head">
+      <section class="panel day-panel">
+        <div class="section-heading">
           <div>
-            <p class="eyebrow">JOURNÉE</p>
+            <p class="section-kicker">JOURNÉE</p>
             <h2 id="selectedDateTitle"></h2>
           </div>
-          <div class="day-total">
+          <div class="day-summary">
             <strong id="dayWorkTotal">0h00</strong>
             <span id="dayTravelTotal">Trajet 0h00</span>
           </div>
         </div>
-
         <div id="dayWarnings"></div>
-        <div id="visitsList" class="visits-list"></div>
-        <button id="addVisitBtn" class="btn primary full">+ Ajouter une intervention</button>
-      </div>
+        <div id="visitsList" class="visit-list"></div>
+        <button id="addVisitBtn" class="primary-button full">+ Ajouter une intervention</button>
+      </section>
     </section>
 
     <section id="peoplePage" class="page">
-      <div class="section-head">
+      <div class="section-heading page-heading">
         <div>
-          <p class="eyebrow">RÉPERTOIRE</p>
+          <p class="section-kicker">RÉPERTOIRE</p>
           <h2>Bénéficiaires</h2>
         </div>
-        <button id="addPersonBtn" class="btn primary compact">+ Ajouter</button>
+        <button id="addPersonBtn" class="primary-button compact">+ Ajouter</button>
       </div>
-
-      <div class="card">
-        <input id="personSearch" class="search" type="search" placeholder="Rechercher un bénéficiaire">
-      </div>
-
+      <section class="panel">
+        <input id="personSearch" class="search-input" type="search" placeholder="Rechercher un bénéficiaire">
+      </section>
       <div id="peopleList"></div>
     </section>
 
     <section id="statsPage" class="page">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">STATISTIQUES</p>
-          <h2 id="statsTitle"></h2>
-        </div>
+      <div class="page-heading">
+        <p class="section-kicker">STATISTIQUES</p>
+        <h2 id="statsTitle"></h2>
       </div>
-
       <div class="stats-grid">
-        <article class="stat-card"><span>Travail</span><strong id="statWork"></strong></article>
-        <article class="stat-card"><span>Trajets</span><strong id="statTravel"></strong></article>
-        <article class="stat-card"><span>Visites</span><strong id="statVisits"></strong></article>
-        <article class="stat-card"><span>Jours travaillés</span><strong id="statDays"></strong></article>
+        <article class="stat-card"><span>Travail</span><strong id="statWork">0h00</strong></article>
+        <article class="stat-card"><span>Trajets</span><strong id="statTravel">0h00</strong></article>
+        <article class="stat-card"><span>Visites</span><strong id="statVisits">0</strong></article>
+        <article class="stat-card"><span>Jours travaillés</span><strong id="statDays">0</strong></article>
       </div>
-
-      <div class="card">
+      <section class="panel">
         <h3>Résumé hebdomadaire</h3>
         <div id="weekStats"></div>
-      </div>
-
-      <div class="card">
+      </section>
+      <section class="panel">
         <h3>Temps par bénéficiaire</h3>
         <div id="personStats"></div>
+      </section>
+    </section>
+
+    <section id="recentPage" class="page">
+      <div class="page-heading">
+        <p class="section-kicker">ACCÈS RAPIDE</p>
+        <h2>Récents</h2>
+        <p class="subtitle">Tes derniers bénéficiaires et interventions.</p>
+      </div>
+      <section class="panel">
+        <h3>Derniers bénéficiaires</h3>
+        <div id="recentPeopleList"></div>
+      </section>
+      <section class="panel">
+        <h3>Dernières interventions</h3>
+        <div id="recentVisitsList"></div>
+      </section>
+    </section>
+
+    <section id="morePage" class="page">
+      <div class="page-heading">
+        <p class="section-kicker">RÉGLAGES</p>
+        <h2>Plus</h2>
       </div>
 
-      <div class="card">
+      <section class="panel">
+        <h3>Apparence</h3>
+        <div class="theme-switcher">
+          <button class="theme-choice active" data-theme-choice="light">
+            <span class="theme-preview light-preview"></span>
+            <span><strong>Clair</strong><small>Mauve, rose et blanc</small></span>
+          </button>
+          <button class="theme-choice" data-theme-choice="dark">
+            <span class="theme-preview dark-preview"></span>
+            <span><strong>Sombre</strong><small>Confortable le soir</small></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
         <h3>Sauvegarde et export</h3>
-        <p class="muted">Les données restent sur ce téléphone. Crée régulièrement une sauvegarde complète.</p>
-        <button id="exportCsvBtn" class="btn primary full">Exporter le mois en CSV</button>
-        <button id="backupBtn" class="btn secondary full">Créer une sauvegarde complète</button>
-        <label class="btn secondary full file-btn">
+        <p class="helper">Les données restent sur ce téléphone. Pense à créer régulièrement une sauvegarde complète.</p>
+        <button id="exportCsvBtn" class="primary-button full">Exporter le mois en CSV</button>
+        <button id="backupBtn" class="secondary-button full">Créer une sauvegarde complète</button>
+        <label class="secondary-button full file-button">
           Restaurer une sauvegarde
           <input id="restoreInput" type="file" accept=".json,application/json">
         </label>
-      </div>
+      </section>
+
+      <section class="panel info-panel">
+        <h3>À propos</h3>
+        <p>AidePlanning fonctionne hors ligne et sans abonnement.</p>
+      </section>
     </section>
   </main>
 
   <nav class="bottom-nav">
-    <button data-page="planningPage" class="nav-btn active"><span>📅</span><small>Planning</small></button>
-    <button data-page="peoplePage" class="nav-btn"><span>👥</span><small>Personnes</small></button>
-    <button data-page="statsPage" class="nav-btn"><span>📊</span><small>Statistiques</small></button>
+    <button data-page="planningPage" class="nav-button active"><span>◫</span><small>Planning</small></button>
+    <button data-page="peoplePage" class="nav-button"><span>♙</span><small>Bénéficiaires</small></button>
+    <button data-page="statsPage" class="nav-button"><span>⌁</span><small>Statistiques</small></button>
+    <button data-page="recentPage" class="nav-button"><span>↶</span><small>Récent</small></button>
+    <button data-page="morePage" class="nav-button"><span>☰</span><small>Plus</small></button>
   </nav>
 </div>
 
-<dialog id="visitDialog">
-  <form id="visitForm" class="dialog-card">
-    <div class="section-head">
+<dialog id="visitDialog" class="sheet-dialog">
+  <form id="visitForm" class="modal-card">
+    <div class="modal-header">
       <div>
-        <p class="eyebrow">INTERVENTION</p>
-        <h2 id="visitDialogTitle">Ajouter</h2>
+        <p class="section-kicker">INTERVENTION</p>
+        <h2 id="visitDialogTitle">Ajouter une intervention</h2>
       </div>
-      <button type="button" class="close-btn" data-close="visitDialog">×</button>
+      <button type="button" class="close-button" data-close="visitDialog">×</button>
     </div>
 
-    <label>Bénéficiaire
-      <button id="visitPersonButton" type="button" class="picker-button">
+    <label class="field">
+      <span>Bénéficiaire</span>
+      <button id="visitPersonButton" type="button" class="picker-trigger">
         <span id="visitPersonLabel">Choisir une personne</span>
-        <span aria-hidden="true">⌄</span>
+        <b>⌄</b>
       </button>
       <input id="visitPerson" type="hidden" required>
     </label>
 
-    <div class="two-cols">
-      <label>Entrée
-        <input id="visitStart" type="time" required>
-      </label>
-      <label>Sortie
-        <input id="visitEnd" type="time" required>
-      </label>
-    </div>
+    <label class="field">
+      <span>Entrée</span>
+      <input id="visitStart" type="time" required>
+    </label>
 
-    <label>Temps de trajet avant cette visite
+    <label class="field">
+      <span>Sortie</span>
+      <input id="visitEnd" type="time" required>
+    </label>
+
+    <label class="field">
+      <span>Temps de trajet avant cette visite</span>
       <input id="visitTravel" type="time" value="00:00">
     </label>
 
-    <label>Note
+    <label class="field">
+      <span>Note</span>
       <textarea id="visitNote" rows="3" placeholder="Ménage, courses, accompagnement…"></textarea>
     </label>
 
-    <div class="dialog-actions">
-      <button type="button" id="deleteVisitBtn" class="btn danger">Supprimer</button>
-      <button type="submit" class="btn primary">Enregistrer</button>
+    <div class="modal-actions">
+      <button type="button" id="deleteVisitBtn" class="danger-button">Supprimer</button>
+      <button type="submit" class="primary-button">Enregistrer</button>
     </div>
   </form>
 </dialog>
 
-<dialog id="personDialog">
-  <form id="personForm" class="dialog-card">
-    <div class="section-head">
+<dialog id="personPickerDialog" class="sheet-dialog">
+  <div class="modal-card picker-modal">
+    <div class="modal-header">
       <div>
-        <p class="eyebrow">BÉNÉFICIAIRE</p>
-        <h2 id="personDialogTitle">Ajouter</h2>
-      </div>
-      <button type="button" class="close-btn" data-close="personDialog">×</button>
-    </div>
-
-    <label>Nom
-      <input id="personName" required placeholder="Mme Dupont">
-    </label>
-    <label>Adresse
-      <input id="personAddress">
-    </label>
-    <label>Téléphone
-      <input id="personPhone" type="tel">
-    </label>
-    <label>Informations utiles
-      <textarea id="personNotes" rows="3" placeholder="Digicode, habitudes, consignes…"></textarea>
-    </label>
-
-    <div class="dialog-actions">
-      <button type="button" id="deletePersonBtn" class="btn danger">Supprimer</button>
-      <button type="submit" class="btn primary">Enregistrer</button>
-    </div>
-  </form>
-</dialog>
-
-<dialog id="personDetailDialog">
-  <div class="dialog-card detail-dialog">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow">FICHE BÉNÉFICIAIRE</p>
-        <h2 id="detailName"></h2>
-      </div>
-      <button type="button" class="close-btn" data-close="personDetailDialog">×</button>
-    </div>
-
-    <div id="detailContact" class="detail-contact"></div>
-
-    <div class="detail-totals">
-      <article><span>Temps passé</span><strong id="detailWork"></strong></article>
-      <article><span>Trajets</span><strong id="detailTravel"></strong></article>
-      <article><span>Interventions</span><strong id="detailVisits"></strong></article>
-    </div>
-
-    <h3>Historique des interventions</h3>
-    <div id="detailHistory" class="history"></div>
-  </div>
-</dialog>
-
-
-<dialog id="personPickerDialog">
-  <div class="dialog-card picker-dialog">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow">BÉNÉFICIAIRE</p>
+        <p class="section-kicker">BÉNÉFICIAIRE</p>
         <h2>Choisir une personne</h2>
       </div>
-      <button type="button" class="close-btn" data-close="personPickerDialog">×</button>
+      <button type="button" class="close-button" data-close="personPickerDialog">×</button>
     </div>
 
-    <div class="picker-tabs" role="tablist">
-      <button type="button" class="picker-tab active" data-picker-tab="recent">Récent</button>
-      <button type="button" class="picker-tab" data-picker-tab="all">Tous</button>
-      <button type="button" class="picker-tab" data-picker-tab="new">Nouveau</button>
+    <div class="segmented">
+      <button type="button" class="segment active" data-picker-tab="recent">Récent</button>
+      <button type="button" class="segment" data-picker-tab="all">Tous</button>
+      <button type="button" class="segment" data-picker-tab="new">Nouveau</button>
     </div>
 
     <div id="pickerRecentPanel" class="picker-panel active">
@@ -237,19 +223,55 @@
     </div>
 
     <div id="pickerAllPanel" class="picker-panel">
-      <input id="pickerSearch" class="search" type="search" placeholder="Rechercher une personne">
+      <input id="pickerSearch" class="search-input" type="search" placeholder="Rechercher une personne">
       <div id="pickerAllList"></div>
     </div>
 
     <div id="pickerNewPanel" class="picker-panel">
-      <label>Nom
-        <input id="quickPersonName" placeholder="Mme Martin" autocomplete="name">
-      </label>
-      <label>Téléphone
-        <input id="quickPersonPhone" type="tel" placeholder="06 12 34 56 78">
-      </label>
-      <button id="quickAddPersonBtn" type="button" class="btn primary full">Créer et sélectionner</button>
+      <label class="field"><span>Nom</span><input id="quickPersonName" placeholder="Mme Martin"></label>
+      <label class="field"><span>Téléphone</span><input id="quickPersonPhone" type="tel" placeholder="06 12 34 56 78"></label>
+      <button id="quickAddPersonBtn" type="button" class="primary-button full">Créer et sélectionner</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="personDialog" class="sheet-dialog">
+  <form id="personForm" class="modal-card">
+    <div class="modal-header">
+      <div>
+        <p class="section-kicker">BÉNÉFICIAIRE</p>
+        <h2 id="personDialogTitle">Ajouter</h2>
+      </div>
+      <button type="button" class="close-button" data-close="personDialog">×</button>
+    </div>
+    <label class="field"><span>Nom</span><input id="personName" required placeholder="Mme Dupont"></label>
+    <label class="field"><span>Adresse</span><input id="personAddress"></label>
+    <label class="field"><span>Téléphone</span><input id="personPhone" type="tel"></label>
+    <label class="field"><span>Informations utiles</span><textarea id="personNotes" rows="3"></textarea></label>
+    <div class="modal-actions">
+      <button type="button" id="deletePersonBtn" class="danger-button">Supprimer</button>
+      <button type="submit" class="primary-button">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="personDetailDialog" class="sheet-dialog">
+  <div class="modal-card detail-modal">
+    <div class="modal-header">
+      <div>
+        <p class="section-kicker">FICHE BÉNÉFICIAIRE</p>
+        <h2 id="detailName"></h2>
+      </div>
+      <button type="button" class="close-button" data-close="personDetailDialog">×</button>
+    </div>
+    <div id="detailContact" class="detail-contact"></div>
+    <div class="detail-stats">
+      <article><span>Temps passé</span><strong id="detailWork"></strong></article>
+      <article><span>Trajets</span><strong id="detailTravel"></strong></article>
+      <article><span>Visites</span><strong id="detailVisits"></strong></article>
+    </div>
+    <h3>Historique des interventions</h3>
+    <div id="detailHistory" class="history"></div>
   </div>
 </dialog>
 
