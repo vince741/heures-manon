@@ -201,7 +201,7 @@ $("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.
 const FEEDBACK_ENDPOINT="https://script.google.com/macros/s/AKfycbxt_GkfUpeiDKYfY4jWr3dd1QOxVtTe9kt_ozQIoNlLt20md7Ax_aBdHvPjeUTTrWzOeA/exec";
 const FEEDBACK_QUEUE_KEY="aideplanning_feedback_queue_v12";
 const FEEDBACK_HISTORY_KEY="aideplanning_feedback_history_v12";
-const APP_VERSION="12 Premium";
+const APP_VERSION="12.1 Premium";
 const feedbackConfigs={
   review:{type:"❤️ Avis",title:"Donner mon avis",emoji:"♥",intro:"Merci d’utiliser AidePlanning. Votre avis aide à améliorer l’application.",rating:true},
   bug:{type:"🐞 Bug",title:"Signaler un bug",emoji:"🐞",intro:"Décrivez précisément le problème rencontré afin qu’il puisse être corrigé.",rating:false},
@@ -266,6 +266,73 @@ addEventListener("online",()=>flushFeedbackQueue(true));
 renderFeedbackHistory();
 setTimeout(()=>flushFeedbackQueue(true),1200);
 $("startAppBtn").onclick=()=>{localStorage.setItem("aideplanning_onboarding_done","1");$("onboardingDialog").close()};
+
+
+let deferredInstallPrompt=null;
+
+function isAppInstalled(){
+  return window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true ||
+    document.referrer.startsWith("android-app://");
+}
+
+function updateInstallStatus(){
+  const installed=isAppInstalled();
+  const summary=$("installStatusSummary");
+  const card=$("installStatusCard");
+  const icon=$("installStatusIcon");
+  const title=$("installStatusTitle");
+  const text=$("installStatusText");
+  const warning=$("onboardingInstallWarning");
+  const button=$("nativeInstallBtn");
+
+  if(summary){
+    summary.textContent=installed ? "Application installée" : "Installation indispensable";
+  }
+  if(card){
+    card.classList.toggle("installed",installed);
+    card.classList.toggle("recommended",!installed);
+  }
+  if(icon)icon.textContent=installed ? "✓" : "📲";
+  if(title)title.textContent=installed ? "Application installée" : "Installation indispensable";
+  if(text)text.textContent=installed
+    ? "AidePlanning fonctionne depuis l’écran d’accueil."
+    : "Installe AidePlanning sur l’écran d’accueil pour une utilisation et un stockage local plus fiables.";
+  if(warning)warning.classList.toggle("is-installed",installed);
+  if(button)button.hidden=installed || !deferredInstallPrompt;
+}
+
+addEventListener("beforeinstallprompt",event=>{
+  event.preventDefault();
+  deferredInstallPrompt=event;
+  updateInstallStatus();
+});
+
+$("nativeInstallBtn")?.addEventListener("click",async()=>{
+  if(!deferredInstallPrompt)return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  updateInstallStatus();
+});
+
+addEventListener("appinstalled",()=>{
+  deferredInstallPrompt=null;
+  updateInstallStatus();
+  toast("AidePlanning est maintenant installé.");
+});
+
+window.matchMedia("(display-mode: standalone)").addEventListener?.("change",updateInstallStatus);
+updateInstallStatus();
+
+/* Évite qu’un champ encore actif laisse Safari/iOS dans un état zoomé après validation. */
+function releaseMobileFocus(){
+  const active=document.activeElement;
+  if(active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))active.blur();
+  requestAnimationFrame(()=>window.scrollTo({top:Math.max(0,window.scrollY),left:0,behavior:"auto"}));
+}
+document.addEventListener("submit",()=>setTimeout(releaseMobileFocus,0),true);
+document.addEventListener("close",releaseMobileFocus,true);
 
 const legacyTheme=localStorage.getItem("aideplanning_theme");
 let initialPalette=localStorage.getItem(PALETTE_KEY);

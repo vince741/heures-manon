@@ -1,7 +1,7 @@
 {
-  "name": "AidePlanning V12 Premium",
+  "name": "AidePlanning V12.1 Premium",
   "short_name": "AidePlanning",
-  "description": "Planning Premium hors ligne avec centre d’assistance intégré",
+  "description": "Planning Premium hors ligne avec installation guidée et centre d’assistance intégré",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

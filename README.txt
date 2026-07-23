@@ -1,30 +1,19 @@
-AidePlanning V12 Premium
+AidePlanning V12.1 Premium
 
 Nouveautés :
-- formulaire d’avis entièrement intégré à l’application
-- aucun besoin d’ouvrir Google Forms
-- envoi direct vers Google Sheets avec Google Apps Script
-- prénom, téléphone, e-mail et message obligatoires
-- validation de l’adresse e-mail et du numéro de téléphone
-- catégories : avis, bug, suggestion et contact
-- note de 1 à 5 pour les avis
-- option de demande de rappel pour les contacts
-- informations techniques ajoutées automatiquement : version, appareil, écran et langue
-- historique local des envois
-- messages hors ligne conservés en attente puis renvoyés au retour de la connexion
-- écran de confirmation intégré
+- message de bienvenue indiquant clairement que l’installation sur l’écran d’accueil est indispensable ;
+- renvoi vers Plus → Installer l’application ;
+- détection automatique du mode installé ;
+- indicateur « Application installée » ou « Installation indispensable » ;
+- bouton d’installation natif lorsqu’il est proposé par Android/Chrome ;
+- correction du zoom automatique après la saisie ou l’ajout d’un bénéficiaire ;
+- champs mobiles forcés à 16 px pour empêcher le zoom automatique d’iOS/Safari ;
+- retrait automatique du focus après validation ;
+- cache hors ligne renouvelé.
 
-Installation GitHub Pages :
-1. Effectuer une sauvegarde JSON depuis l’ancienne version.
-2. Décompresser cette archive.
-3. Remplacer tous les fichiers du dépôt GitHub par ceux-ci.
-4. Valider avec Commit changes.
-5. Attendre quelques minutes puis ouvrir l’application avec Internet.
-6. Fermer et relancer l’application pour renouveler le cache hors ligne.
-
-Google Sheets doit comporter les colonnes dans cet ordre :
-Date | Type | Note | Message | Nom | E-mail | Téléphone | Rappel | Version | Appareil
-
-Le script Apps Script actuellement utilisé reçoit :
-type, note, message, nom, email, tel, rappel, version, appareil.
-IMPORTANT : ajoute data.rappel dans Apps Script si tu souhaites enregistrer la demande de rappel dans une colonne séparée.
+Installation de la mise à jour :
+1. Faire une sauvegarde JSON dans Plus → Données et sauvegarde.
+2. Remplacer tous les anciens fichiers du dépôt GitHub par ceux de cette archive.
+3. Valider avec Commit changes.
+4. Ouvrir une première fois l’application avec Internet.
+5. Fermer complètement l’application puis la relancer.

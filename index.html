@@ -2,7 +2,7 @@
 <html lang="fr" data-palette="rose" data-mode="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ff4f8b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -140,7 +140,7 @@
           <span class="settings-icon">＋</span>
           <span class="settings-copy">
             <strong>Installer l’application</strong>
-            <small>Instructions pour iPhone et Android</small>
+            <small id="installStatusSummary">Vérification de l’installation…</small>
           </span>
           <span class="settings-chevron">›</span>
         </button>
@@ -394,12 +394,23 @@
       </div>
       <button type="button" class="close-button" data-close="installDialog">×</button>
     </div>
-    <p>Pour utiliser AidePlanning comme une vraie application, ouvre le lien dans le navigateur puis ajoute-le à l’écran d’accueil.</p>
+    <div id="installStatusCard" class="install-status-card">
+      <span id="installStatusIcon">⌛</span>
+      <div>
+        <strong id="installStatusTitle">Vérification en cours</strong>
+        <p id="installStatusText">AidePlanning vérifie si l’application est installée.</p>
+      </div>
+    </div>
+    <div class="install-important">
+      <strong>Installation indispensable</strong>
+      <p>Installe AidePlanning sur l’écran d’accueil afin de bénéficier du stockage local le plus fiable possible et d’éviter une perte de données liée au navigateur.</p>
+    </div>
     <h4>Sur iPhone</h4>
-    <p>Ouvre le lien dans Safari, appuie sur le bouton Partager <strong>□↑</strong>, choisis <strong>Sur l’écran d’accueil</strong>, puis appuie sur <strong>Ajouter</strong>.</p>
+    <p>Ouvre AidePlanning dans <strong>Safari</strong>, appuie sur Partager <strong>□↑</strong>, choisis <strong>Sur l’écran d’accueil</strong>, puis <strong>Ajouter</strong>.</p>
     <h4>Sur Android</h4>
-    <p>Ouvre le lien dans Google Chrome, appuie sur le menu <strong>⋮</strong>, puis choisis <strong>Ajouter à l’écran d’accueil</strong> ou <strong>Installer l’application</strong>.</p>
-    <p class="helper">Une fois installée, AidePlanning peut fonctionner hors ligne.</p>
+    <p>Ouvre AidePlanning dans <strong>Google Chrome</strong>, appuie sur le menu <strong>⋮</strong>, puis choisis <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</p>
+    <button id="nativeInstallBtn" type="button" class="primary-button full" hidden>Installer maintenant</button>
+    <p class="helper">Une sauvegarde JSON régulière reste recommandée dans Plus → Données et sauvegarde.</p>
   </div>
 </dialog>
 
@@ -419,7 +430,28 @@
 </dialog>
 
 
-<dialog id="onboardingDialog" class="sheet-dialog onboarding-dialog"><div class="modal-card onboarding-card"><div class="onboarding-logo">♥</div><p class="section-kicker">BIENVENUE</p><h1>AidePlanning</h1><p class="onboarding-text">Une application conçue pour simplifier le quotidien des aides à domicile. Tes données restent enregistrées sur ton appareil.</p><div class="onboarding-points"><span>✓ Fonctionne hors ligne</span><span>✓ Sauvegarde à tout moment</span><span>✓ Sans abonnement</span></div><button id="startAppBtn" class="primary-button full">Commencer</button></div></dialog>
+<dialog id="onboardingDialog" class="sheet-dialog onboarding-dialog">
+  <div class="modal-card onboarding-card">
+    <div class="onboarding-logo">♥</div>
+    <p class="section-kicker">BIENVENUE</p>
+    <h1>AidePlanning</h1>
+    <p class="onboarding-text">Une application conçue pour simplifier le quotidien des aides à domicile.</p>
+    <div id="onboardingInstallWarning" class="onboarding-install-warning">
+      <span>📲</span>
+      <div>
+        <strong>Installation impérative</strong>
+        <p>Pour une sauvegarde locale plus fiable, installe l’application sur l’écran d’accueil avant de commencer.</p>
+        <small>Consulte ensuite <b>Plus → Installer l’application</b>.</small>
+      </div>
+    </div>
+    <div class="onboarding-points">
+      <span>✓ Fonctionne hors ligne</span>
+      <span>✓ Sauvegarde locale</span>
+      <span>✓ Sans abonnement</span>
+    </div>
+    <button id="startAppBtn" class="primary-button full">J’ai compris, commencer</button>
+  </div>
+</dialog>
 <dialog id="feedbackDialog" class="sheet-dialog">
   <form id="feedbackForm" class="modal-card feedback-card" novalidate>
     <div class="modal-header"><div><p class="section-kicker">CENTRE D’ASSISTANCE</p><h2 id="feedbackTitle">Donner mon avis</h2></div><button type="button" class="close-button" data-close="feedbackDialog">×</button></div>

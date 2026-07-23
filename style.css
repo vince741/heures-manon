@@ -281,3 +281,111 @@ input[type="time"]{width:100%;min-width:0;max-width:100%;display:block;-webkit-a
 .status-pill{font-size:10px;font-weight:900;border-radius:999px;padding:6px 8px;height:max-content}.status-pill.sent{background:#ddf6e8;color:#1b7b49}.status-pill.pending{background:#fff1ce;color:#936400}
 .empty-history{text-align:center;padding:30px 12px;color:var(--muted)}.empty-history span{display:block;font-size:42px;margin-bottom:10px}.empty-history strong{color:var(--text);display:block;margin-bottom:5px}
 @media(max-width:560px){.feedback-two-columns{grid-template-columns:1fr}}
+
+
+/* V12.1 — stabilité mobile et installation */
+html{
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+}
+input,
+textarea,
+select,
+.search-input,
+.field input,
+.field textarea{
+  font-size:16px !important;
+}
+input[type="time"]{
+  font-size:16px !important;
+}
+body{
+  touch-action:manipulation;
+}
+.install-status-card{
+  display:grid;
+  grid-template-columns:44px 1fr;
+  gap:12px;
+  align-items:center;
+  padding:14px;
+  margin:14px 0;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:var(--surface-soft);
+}
+.install-status-card>span{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  background:var(--surface);
+  font-size:23px;
+}
+.install-status-card strong{
+  display:block;
+  margin-bottom:3px;
+}
+.install-status-card p{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+}
+.install-status-card.installed{
+  border-color:color-mix(in srgb,#35a56f 45%,var(--border));
+  background:color-mix(in srgb,#35a56f 11%,var(--surface));
+}
+.install-status-card.recommended{
+  border-color:color-mix(in srgb,#e29a32 48%,var(--border));
+  background:color-mix(in srgb,#e29a32 11%,var(--surface));
+}
+.install-important{
+  padding:14px;
+  border-radius:17px;
+  border:1px solid color-mix(in srgb,var(--primary) 35%,var(--border));
+  background:var(--primary-soft);
+  margin:14px 0 18px;
+}
+.install-important strong{
+  display:block;
+  margin-bottom:5px;
+  color:var(--primary);
+}
+.install-important p{
+  margin:0;
+  line-height:1.55;
+  font-size:14px;
+}
+.onboarding-install-warning{
+  display:grid;
+  grid-template-columns:42px 1fr;
+  gap:11px;
+  text-align:left;
+  margin:18px 0;
+  padding:14px;
+  border-radius:18px;
+  background:var(--primary-soft);
+  border:1px solid color-mix(in srgb,var(--primary) 32%,var(--border));
+}
+.onboarding-install-warning>span{
+  font-size:27px;
+}
+.onboarding-install-warning strong{
+  display:block;
+  color:var(--primary);
+  margin-bottom:4px;
+}
+.onboarding-install-warning p{
+  margin:0 0 5px;
+  color:var(--text);
+  font-size:13px;
+  line-height:1.45;
+}
+.onboarding-install-warning small{
+  color:var(--muted);
+  line-height:1.4;
+}
+.onboarding-install-warning.is-installed{
+  display:none;
+}
