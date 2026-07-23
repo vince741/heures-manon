@@ -18,4 +18,148 @@ $("addVisit").onclick=()=>openVisit();$("addPerson").onclick=()=>openPerson();$(
 function download(content,name,type){let a=document.createElement("a"),u=URL.createObjectURL(new Blob([content],{type}));a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
 $("csv").onclick=()=>{let r=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps trajet","Note"]];monthVisits().forEach(v=>r.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(dur(v.start,v.end)),fmt(travel(v)),v.note]));download("\ufeff"+r.map(x=>x.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),"aideplanning.csv","text/csv")};
 $("backup").onclick=()=>download(JSON.stringify(db,null,2),"aideplanning-sauvegarde.json","application/json");$("restore").onchange=async e=>{try{let x=JSON.parse(await e.target.files[0].text());if(!x.people||!x.visits)throw 0;if(confirm("Remplacer les données actuelles ?")){db=x;save();render();toast("Sauvegarde restaurée")}}catch{toast("Fichier invalide")}};
+
+function normalizeOcrText(text){
+  return text
+    .replace(/[|]/g,"I")
+    .replace(/[–—]/g,"-")
+    .replace(/\s+/g," ")
+    .trim();
+}
+function bestPersonMatch(raw){
+  const q=raw.toLowerCase().replace(/[^a-zà-ÿ0-9 ]/gi," ").trim();
+  if(!q)return "";
+  let best="",score=0;
+  db.people.forEach(p=>{
+    const name=p.name.toLowerCase();
+    const words=q.split(/\s+/).filter(w=>w.length>2);
+    let s=words.filter(w=>name.includes(w)).length;
+    if(name.includes(q)||q.includes(name))s+=3;
+    if(s>score){score=s;best=p.id}
+  });
+  return best;
+}
+function parseOcrLines(text){
+  const lines=text.split(/\n+/).map(normalizeOcrText).filter(Boolean);
+  const rows=[];
+  const timePattern=/(\d{1,2})\s*[:hH.]\s*(\d{2})\s*(?:-|à|a|→)\s*(\d{1,2})\s*[:hH.]\s*(\d{2})/i;
+  lines.forEach(line=>{
+    const m=line.match(timePattern);
+    if(!m)return;
+    const start=`${pad(Math.min(23,Number(m[1])))}:${pad(Math.min(59,Number(m[2])))}`;
+    const end=`${pad(Math.min(23,Number(m[3])))}:${pad(Math.min(59,Number(m[4])))}`;
+    const rawName=line.replace(m[0],"").replace(/^[\s:;,-]+|[\s:;,-]+$/g,"").trim();
+    rows.push({personId:bestPersonMatch(rawName),rawName,start,end});
+  });
+  return rows;
+}
+function personOptions(selected="",rawName=""){
+  let opts='<option value="">Choisir / créer ensuite</option>';
+  db.people.slice().sort((a,b)=>a.name.localeCompare(b.name,"fr")).forEach(p=>{
+    opts+=`<option value="${p.id}" ${p.id===selected?"selected":""}>${esc(p.name)}</option>`;
+  });
+  if(rawName && !selected) opts+=`<option value="__new__" selected>Créer : ${esc(rawName)}</option>`;
+  return opts;
+}
+function addOcrReviewRow(row={personId:"",rawName:"",start:"08:00",end:"09:00"}){
+  const wrap=document.createElement("div");
+  wrap.className="ocr-row";
+  wrap.innerHTML=`
+    <label class="ocr-person">Bénéficiaire
+      <select class="ocr-person-select">${personOptions(row.personId,row.rawName)}</select>
+      <input class="ocr-new-name" placeholder="Nom à créer" value="${esc(row.rawName)}" ${row.personId?'hidden':''}>
+    </label>
+    <label>Entrée<input class="ocr-start" type="time" value="${row.start}" required></label>
+    <label>Sortie<input class="ocr-end" type="time" value="${row.end}" required></label>
+    <button type="button" class="ocr-remove">×</button>`;
+  const select=wrap.querySelector(".ocr-person-select"),newName=wrap.querySelector(".ocr-new-name");
+  select.addEventListener("change",()=>{newName.hidden=select.value!=="__new__"});
+  wrap.querySelector(".ocr-remove").onclick=()=>wrap.remove();
+  $("ocrRows").appendChild(wrap);
+}
+function openPhotoImport(){
+  $("photoDate").value=key(selected);
+  $("photoInput").value="";
+  $("photoPreview").hidden=true;
+  $("ocrProgress").textContent="";
+  $("ocrRows").innerHTML="";
+  $("ocrReview").hidden=true;
+  $("photoDlg").showModal();
+}
+$("importPhoto").onclick=openPhotoImport;
+$("photoInput").onchange=e=>{
+  const file=e.target.files?.[0];
+  if(!file)return;
+  $("photoPreview").src=URL.createObjectURL(file);
+  $("photoPreview").hidden=false;
+};
+$("analyzePhoto").onclick=async()=>{
+  const file=$("photoInput").files?.[0];
+  if(!file)return toast("Choisissez une photo.");
+  if(typeof Tesseract==="undefined")return toast("Internet requis pour charger la lecture de photo.");
+  $("ocrProgress").textContent="Préparation de la lecture…";
+  $("analyzePhoto").disabled=true;
+  try{
+    const result=await Tesseract.recognize(file,"fra",{
+      logger:m=>{
+        if(m.status==="recognizing text"){
+          $("ocrProgress").textContent=`Lecture de la photo : ${Math.round((m.progress||0)*100)} %`;
+        }else{
+          $("ocrProgress").textContent="Analyse en cours…";
+        }
+      }
+    });
+    const rows=parseOcrLines(result.data.text||"");
+    $("ocrRows").innerHTML="";
+    rows.forEach(addOcrReviewRow);
+    if(!rows.length){
+      addOcrReviewRow();
+      toast("Aucune ligne certaine : saisis ou corrige manuellement.");
+    }
+    $("ocrReview").hidden=false;
+    $("ocrProgress").textContent=`${rows.length} ligne${rows.length>1?"s":""} détectée${rows.length>1?"s":""}.`;
+  }catch(err){
+    console.error(err);
+    $("ocrProgress").textContent="La photo n’a pas pu être lue.";
+    toast("Échec de lecture. Essaie une photo plus nette.");
+  }finally{
+    $("analyzePhoto").disabled=false;
+  }
+};
+$("addOcrRow").onclick=()=>addOcrReviewRow();
+$("importOcrRows").onclick=()=>{
+  const date=$("photoDate").value;
+  if(!date)return toast("Choisissez une date.");
+  const rows=[...document.querySelectorAll(".ocr-row")];
+  if(!rows.length)return toast("Aucune intervention à importer.");
+  db.visits[date]??=[];
+  let imported=0;
+  for(const row of rows){
+    const select=row.querySelector(".ocr-person-select");
+    let personId=select.value;
+    if(personId==="__new__"||!personId){
+      const name=row.querySelector(".ocr-new-name").value.trim();
+      if(!name)continue;
+      const existing=db.people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+      if(existing)personId=existing.id;
+      else{
+        personId=uid("p");
+        db.people.push({id:personId,name,address:"",phone:"",notes:"Créé depuis l’import photo"});
+      }
+    }
+    const start=row.querySelector(".ocr-start").value,end=row.querySelector(".ocr-end").value;
+    if(!start||!end)continue;
+    db.visits[date].push({id:uid("v"),personId,start,end,travel:"00:00",note:"Importé depuis une photo"});
+    imported++;
+  }
+  save();
+  const parts=date.split("-").map(Number);
+  selected=new Date(parts[0],parts[1]-1,parts[2]);
+  month=new Date(parts[0],parts[1]-1,1);
+  $("photoDlg").close();
+  show("planning");
+  render();
+  toast(`${imported} intervention${imported>1?"s":""} importée${imported>1?"s":""}.`);
+};
+
 if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js"));render();
