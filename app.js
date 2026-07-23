@@ -198,29 +198,73 @@ $("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauv
 $("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());if(!parsed.people||!parsed.visits)throw new Error();if(confirm("Remplacer toutes les données actuelles ?")){db=parsed;save();render();toast("Sauvegarde restaurée.")}}catch{toast("Sauvegarde invalide.")}e.target.value=""};
 
 
+const FEEDBACK_ENDPOINT="https://script.google.com/macros/s/AKfycbxt_GkfUpeiDKYfY4jWr3dd1QOxVtTe9kt_ozQIoNlLt20md7Ax_aBdHvPjeUTTrWzOeA/exec";
+const FEEDBACK_QUEUE_KEY="aideplanning_feedback_queue_v12";
+const FEEDBACK_HISTORY_KEY="aideplanning_feedback_history_v12";
+const APP_VERSION="12 Premium";
 const feedbackConfigs={
-  review:{title:"Donner mon avis",emoji:"♥",intro:"Merci d’utiliser AidePlanning. Votre avis aide à améliorer l’application.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%E2%9D%A4%EF%B8%8F+Avis"},
-  bug:{title:"Signaler un bug",emoji:"🐞",intro:"Décrivez le problème rencontré afin qu’il puisse être corrigé.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%F0%9F%90%9E+Bug"},
-  idea:{title:"Proposer une idée",emoji:"💡",intro:"Partagez une fonctionnalité ou une amélioration que vous aimeriez retrouver dans AidePlanning.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%F0%9F%92%A1+Suggestion"},
-  contact:{title:"Contacter le développeur",emoji:"✉️",intro:"Posez une question ou envoyez simplement un message.",url:"https://docs.google.com/forms/d/e/1FAIpQLSfYLAyeY50cHDVl8yYNrfnLgYbcmvz8K9ukxQttZY1oDYIsqw/viewform?usp=pp_url&entry.1096863422=%E2%9C%89%EF%B8%8F+Contact"}
+  review:{type:"❤️ Avis",title:"Donner mon avis",emoji:"♥",intro:"Merci d’utiliser AidePlanning. Votre avis aide à améliorer l’application.",rating:true},
+  bug:{type:"🐞 Bug",title:"Signaler un bug",emoji:"🐞",intro:"Décrivez précisément le problème rencontré afin qu’il puisse être corrigé.",rating:false},
+  idea:{type:"💡 Suggestion",title:"Proposer une idée",emoji:"💡",intro:"Partagez une fonctionnalité ou une amélioration que vous aimeriez retrouver.",rating:false},
+  contact:{type:"✉️ Contact",title:"Contacter le développeur",emoji:"✉️",intro:"Posez une question ou demandez à être rappelé(e).",rating:false}
 };
-let activeFeedbackType="review";
+let activeFeedbackType="review",feedbackRating=0,feedbackSending=false;
+const readJson=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))||fallback}catch{return fallback}};
+const writeJson=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
+function deviceDescription(){
+  const ua=navigator.userAgent||"Appareil inconnu";
+  const platform=/iPhone|iPad|iPod/i.test(ua)?"iPhone/iPad":/Android/i.test(ua)?"Android":"Ordinateur/autre";
+  return `${platform} · ${screen.width}×${screen.height} · ${navigator.language||"fr"}`;
+}
+function clearFeedbackErrors(){document.querySelectorAll(".field-error").forEach(e=>e.textContent="");document.querySelectorAll("#feedbackForm .field.invalid").forEach(e=>e.classList.remove("invalid"))}
+function setFeedbackError(id,message){const input=$(id),field=input.closest(".field");field?.classList.add("invalid");$(id+"Error").textContent=message}
+function validFeedback(){
+  clearFeedbackErrors();let ok=true;
+  const name=$("feedbackName").value.trim(),phone=$("feedbackPhone").value.trim(),email=$("feedbackEmail").value.trim(),message=$("feedbackMessage").value.trim();
+  if(!message){setFeedbackError("feedbackMessage","Le message est obligatoire.");ok=false}
+  if(!name){setFeedbackError("feedbackName","Le prénom est obligatoire.");ok=false}
+  if(!phone){setFeedbackError("feedbackPhone","Le téléphone est obligatoire.");ok=false}else if(phone.replace(/\D/g,"").length<8){setFeedbackError("feedbackPhone","Saisissez un numéro de téléphone valide.");ok=false}
+  if(!email){setFeedbackError("feedbackEmail","L’e-mail est obligatoire.");ok=false}else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setFeedbackError("feedbackEmail","Saisissez une adresse e-mail valide.");ok=false}
+  return ok;
+}
 function openFeedback(type){
-  activeFeedbackType=type;
-  const c=feedbackConfigs[type];
-  $("feedbackTitle").textContent=c.title;
-  $("feedbackEmoji").textContent=c.emoji;
-  $("feedbackIntro").textContent=c.intro;
-  $("openFeedbackFormBtn").textContent=type==="bug"?"Envoyer un rapport":"Ouvrir le formulaire";
-  $("feedbackDialog").showModal();
+  activeFeedbackType=type;feedbackRating=0;clearFeedbackErrors();
+  const c=feedbackConfigs[type];$("feedbackTitle").textContent=c.title;$("feedbackEmoji").textContent=c.emoji;$("feedbackIntro").textContent=c.intro;
+  $("ratingBlock").style.display=c.rating?"block":"none";$("callbackBlock").style.display=type==="contact"?"flex":"none";
+  $("feedbackForm").reset();document.querySelectorAll("#ratingStars button").forEach(b=>b.classList.remove("active"));$("feedbackDialog").showModal();
 }
 document.querySelectorAll("[data-open-feedback]").forEach(b=>b.onclick=()=>openFeedback(b.dataset.openFeedback));
-$("openFeedbackFormBtn").onclick=()=>{
+document.querySelectorAll("#ratingStars button").forEach(b=>b.onclick=()=>{feedbackRating=Number(b.dataset.rating);document.querySelectorAll("#ratingStars button").forEach(x=>x.classList.toggle("active",Number(x.dataset.rating)<=feedbackRating))});
+function buildFeedbackPayload(){
   const c=feedbackConfigs[activeFeedbackType];
-  const opened=window.open(c.url,"_blank","noopener,noreferrer");
-  if(!opened)location.href=c.url;
-  $("feedbackDialog").close();
+  return {id:crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`,date:new Date().toISOString(),type:c.type,note:c.rating?feedbackRating:"",message:$("feedbackMessage").value.trim(),nom:$("feedbackName").value.trim(),email:$("feedbackEmail").value.trim(),tel:$("feedbackPhone").value.trim(),rappel:$("feedbackCallback").checked?"Oui":"Non",version:APP_VERSION,appareil:deviceDescription()};
+}
+async function postFeedback(payload){
+  await fetch(FEEDBACK_ENDPOINT,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});
+}
+function addHistory(payload,status){const history=readJson(FEEDBACK_HISTORY_KEY,[]);history.unshift({...payload,status});writeJson(FEEDBACK_HISTORY_KEY,history.slice(0,30));renderFeedbackHistory()}
+function queueFeedback(payload){const queue=readJson(FEEDBACK_QUEUE_KEY,[]);if(!queue.some(x=>x.id===payload.id))queue.push(payload);writeJson(FEEDBACK_QUEUE_KEY,queue);addHistory(payload,"pending")}
+function markHistorySent(id){const history=readJson(FEEDBACK_HISTORY_KEY,[]).map(x=>x.id===id?{...x,status:"sent"}:x);writeJson(FEEDBACK_HISTORY_KEY,history);renderFeedbackHistory()}
+async function flushFeedbackQueue(silent=true){
+  if(!navigator.onLine)return false;let queue=readJson(FEEDBACK_QUEUE_KEY,[]);if(!queue.length)return true;const remaining=[];
+  for(const payload of queue){try{await postFeedback(payload);markHistorySent(payload.id)}catch{remaining.push(payload)}}writeJson(FEEDBACK_QUEUE_KEY,remaining);renderFeedbackHistory();if(!silent)toast(remaining.length?`${remaining.length} message(s) toujours en attente.`:"Tous les messages ont été envoyés.");return !remaining.length;
+}
+function renderFeedbackHistory(){
+  const box=$("feedbackHistoryList");if(!box)return;const history=readJson(FEEDBACK_HISTORY_KEY,[]),queue=readJson(FEEDBACK_QUEUE_KEY,[]);$("retryFeedbackBtn").style.display=queue.length?"block":"none";
+  box.innerHTML=history.length?history.map(x=>`<article class="feedback-history-item"><div><strong>${esc(x.type)}</strong><small>${new Date(x.date).toLocaleString("fr-FR")}</small></div><span class="status-pill ${x.status}">${x.status==="sent"?"Envoyé":"En attente"}</span><p>${esc(x.message)}</p></article>`).join(""):`<div class="empty-history"><span>💬</span><strong>Aucun envoi pour le moment</strong><p>Vos prochains retours apparaîtront ici.</p></div>`;
+}
+$("feedbackForm").onsubmit=async e=>{
+  e.preventDefault();if(feedbackSending||!validFeedback())return;feedbackSending=true;const button=$("sendFeedbackBtn"),payload=buildFeedbackPayload();button.disabled=true;button.innerHTML="<span class='sending-spinner'></span> Envoi en cours…";
+  try{
+    if(!navigator.onLine)throw new Error("offline");await postFeedback(payload);addHistory(payload,"sent");$("feedbackDialog").close();$("feedbackSuccessText").textContent="Votre retour a bien été envoyé sans quitter AidePlanning.";$("feedbackSuccessDialog").showModal();
+  }catch{
+    queueFeedback(payload);$("feedbackDialog").close();$("feedbackSuccessText").textContent="Vous êtes hors ligne. Votre message est enregistré et sera renvoyé automatiquement dès que possible.";$("feedbackSuccessDialog").showModal();
+  }finally{feedbackSending=false;button.disabled=false;button.innerHTML="<span>Envoyer sans quitter l’application</span>"}
 };
+$("retryFeedbackBtn").onclick=()=>flushFeedbackQueue(false);
+addEventListener("online",()=>flushFeedbackQueue(true));
+renderFeedbackHistory();
+setTimeout(()=>flushFeedbackQueue(true),1200);
 $("startAppBtn").onclick=()=>{localStorage.setItem("aideplanning_onboarding_done","1");$("onboardingDialog").close()};
 
 const legacyTheme=localStorage.getItem("aideplanning_theme");
