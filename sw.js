@@ -1,8 +1,8 @@
 const SCOPE = new URL(self.registration.scope);
 const CACHE_PREFIX = `aideplanning:${SCOPE.href}:`;
-const CACHE = `${CACHE_PREFIX}v13`;
+const CACHE = `${CACHE_PREFIX}v14`;
 const INDEX = new URL("index.html", SCOPE).href;
-const ASSETS = [INDEX, ...["style.css?v=13", "data.js?v=13", "app.js?v=13", "manifest.json", "icon.svg"].map(path => new URL(path, SCOPE).href)];
+const ASSETS = [INDEX, ...["style.css?v=14", "data.js?v=14", "workflows.js?v=14", "app.js?v=14", "manifest.json", "icon.svg"].map(path => new URL(path, SCOPE).href)];
 
 self.addEventListener("install", event => {
   const requests = ASSETS.map(url => new Request(url, { cache: "reload" }));

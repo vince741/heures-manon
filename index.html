@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 <div class="app-shell">
@@ -43,11 +43,16 @@
           </div>
         </div>
         <dl class="period-summary">
-          <div><dt>Visites</dt><dd id="periodVisits">0</dd></div>
-          <div><dt>Travail</dt><dd id="periodWork">0h00</dd></div>
-          <div><dt>Trajets</dt><dd id="periodTravel">0h00</dd></div>
+          <div><dt>Prévues</dt><dd id="periodPlanned">0h00</dd></div>
+          <div><dt>Réalisées</dt><dd id="periodWork">0h00</dd></div>
+          <div><dt>Trajets réalisés</dt><dd id="periodTravel">0h00</dd></div>
         </dl>
       </section>
+
+      <aside id="backupReminder" class="backup-reminder" aria-label="Sauvegarde" hidden>
+        <p id="backupReminderText"></p>
+        <div><button type="button" id="reminderBackupBtn" class="mini-button">Sauvegarder</button><button type="button" id="snoozeBackupBtn" class="quiet-button">Plus tard</button></div>
+      </aside>
 
       <div id="planningLayout" class="planning-layout">
         <section id="monthCalendar" class="panel calendar-panel" aria-label="Calendrier du mois" hidden>
@@ -66,8 +71,9 @@
               <h2 id="selectedDateTitle" tabindex="-1"></h2>
             </div>
             <div class="day-summary">
-              <strong id="dayWorkTotal">0h00</strong>
-              <span id="dayTravelTotal">Trajet 0h00</span>
+              <strong id="dayWorkTotal">0h00 réalisé</strong>
+              <span id="dayPlannedTotal">0h00 prévu</span>
+              <span id="dayTravelTotal">Trajets réalisés 0h00</span>
             </div>
           </div>
           <div id="dayWarnings"></div>
@@ -85,29 +91,41 @@
         </div>
         <button id="addPersonBtn" class="primary-button compact">+ Ajouter</button>
       </div>
-      <section class="panel">
+      <section class="panel people-tools">
+        <div class="planning-view-switch" role="group" aria-label="Bénéficiaires à afficher">
+          <button id="activePeopleBtn" type="button" aria-pressed="true">Actifs</button>
+          <button id="archivedPeopleBtn" type="button" aria-pressed="false">Archivés</button>
+        </div>
         <input id="personSearch" class="search-input" type="search" aria-label="Rechercher un bénéficiaire" placeholder="Rechercher un bénéficiaire">
       </section>
       <div id="peopleList"></div>
     </section>
 
     <section id="statsPage" class="page">
-      <div class="page-heading">
-        <p class="section-kicker">STATISTIQUES</p>
-        <h2 id="statsTitle"></h2>
+      <div class="section-heading page-heading stats-heading">
+        <div class="period-heading">
+          <div class="period-arrows">
+            <button id="prevStatsMonth" class="icon-button" type="button" aria-label="Mois précédent">‹</button>
+            <button id="nextStatsMonth" class="icon-button" type="button" aria-label="Mois suivant">›</button>
+          </div>
+          <div><p class="section-kicker">Statistiques</p><h2 id="statsTitle" aria-live="polite"></h2></div>
+        </div>
+        <button id="openReportBtn" class="primary-button compact" type="button">Relevé mensuel</button>
       </div>
       <div class="stats-grid">
-        <article class="stat-card"><span>Travail</span><strong id="statWork">0h00</strong></article>
-        <article class="stat-card"><span>Trajets</span><strong id="statTravel">0h00</strong></article>
-        <article class="stat-card"><span>Visites</span><strong id="statVisits">0</strong></article>
+        <article class="stat-card"><span>Heures réalisées</span><strong id="statWork">0h00</strong></article>
+        <article class="stat-card"><span>Heures prévues</span><strong id="statPlanned">0h00</strong></article>
+        <article class="stat-card"><span>Trajets réalisés</span><strong id="statTravel">0h00</strong></article>
+        <article class="stat-card"><span>Visites réalisées</span><strong id="statVisits">0</strong></article>
         <article class="stat-card"><span>Jours travaillés</span><strong id="statDays">0</strong></article>
+        <article class="stat-card"><span>Visites annulées</span><strong id="statCancelled">0</strong></article>
       </div>
       <section class="panel">
-        <h3>Résumé hebdomadaire</h3>
+        <h3>Heures réalisées par semaine</h3>
         <div id="weekStats"></div>
       </section>
       <section class="panel">
-        <h3>Temps par bénéficiaire</h3>
+        <h3>Heures réalisées par bénéficiaire</h3>
         <div id="personStats"></div>
       </section>
     </section>
@@ -191,7 +209,7 @@
 </div>
 
 <dialog id="visitDialog" class="sheet-dialog">
-  <form id="visitForm" class="modal-card">
+  <form id="visitForm" class="modal-card visit-form">
     <div class="modal-header">
       <div>
         <p id="visitDialogDate" class="section-kicker"></p>
@@ -209,18 +227,17 @@
       <input id="visitPerson" type="hidden" required>
     </label>
 
-    <label class="field">
-      <span>Entrée</span>
-      <input id="visitStart" type="time" required>
-    </label>
+    <div class="visit-form-grid">
+      <label class="field"><span>Date</span><input id="visitDate" type="date" required></label>
+      <label class="field"><span>Statut</span><select id="visitStatus" class="form-select">
+        <option value="planned">Prévue</option><option value="done">Réalisée</option><option value="cancelled">Annulée</option>
+      </select></label>
+      <label class="field"><span>Entrée</span><input id="visitStart" type="time" required></label>
+      <label class="field"><span>Sortie</span><input id="visitEnd" type="time" required></label>
+    </div>
 
     <label class="field">
-      <span>Sortie</span>
-      <input id="visitEnd" type="time" required>
-    </label>
-
-    <label class="field">
-      <span>Temps de trajet avant cette visite</span>
+      <span>Durée du trajet avant la visite</span>
       <input id="visitTravel" type="time" value="00:00">
     </label>
 
@@ -229,9 +246,22 @@
       <textarea id="visitNote" rows="3" placeholder="Ménage, courses, accompagnement…"></textarea>
     </label>
 
-    <div class="modal-actions">
-      <button type="button" id="deleteVisitBtn" class="danger-button">Supprimer</button>
-      <button type="submit" class="primary-button">Enregistrer</button>
+    <div id="recurrenceFields" class="recurrence-fields">
+      <label class="repeat-toggle"><input id="repeatVisit" type="checkbox"> Répéter toutes les semaines</label>
+      <div id="repeatDetails" hidden>
+        <label class="field"><span>Jusqu’au</span><input id="repeatUntil" type="date"></label>
+        <p id="repeatPreview" class="helper" aria-live="polite"></p>
+      </div>
+    </div>
+    <p id="visitConflict" class="warning-box" role="status" hidden></p>
+    <p id="visitError" class="import-message error" role="alert" hidden></p>
+
+    <div class="visit-form-actions">
+      <button type="submit" class="primary-button full">Enregistrer</button>
+      <div id="editVisitActions" class="edit-visit-actions" hidden>
+        <button type="button" id="duplicateVisitBtn" class="secondary-button">Dupliquer</button>
+        <button type="button" id="deleteVisitBtn" class="danger-button">Mettre à la corbeille</button>
+      </div>
     </div>
   </form>
 </dialog>
@@ -264,6 +294,7 @@
     <div id="pickerNewPanel" class="picker-panel">
       <label class="field"><span>Nom</span><input id="quickPersonName" placeholder="Mme Martin"></label>
       <label class="field"><span>Téléphone</span><input id="quickPersonPhone" type="tel" placeholder="06 12 34 56 78"></label>
+      <p id="quickPersonError" class="import-message error" role="alert" hidden></p>
       <button id="quickAddPersonBtn" type="button" class="primary-button full">Créer et sélectionner</button>
     </div>
   </div>
@@ -283,8 +314,9 @@
     <label class="field"><span>Téléphone</span><input id="personPhone" type="tel"></label>
     <label class="field"><span>Couleur dans le planning</span><select id="personColor" class="person-color"></select></label>
     <label class="field"><span>Informations utiles</span><textarea id="personNotes" rows="3"></textarea></label>
+    <p id="personError" class="import-message error" role="alert" hidden></p>
     <div class="modal-actions">
-      <button type="button" id="deletePersonBtn" class="danger-button">Supprimer</button>
+      <button type="button" id="archivePersonBtn" class="secondary-button">Archiver</button>
       <button type="submit" class="primary-button">Enregistrer</button>
     </div>
   </form>
@@ -301,9 +333,9 @@
     </div>
     <div id="detailContact" class="detail-contact"></div>
     <div class="detail-stats">
-      <article><span>Temps passé</span><strong id="detailWork"></strong></article>
-      <article><span>Trajets</span><strong id="detailTravel"></strong></article>
-      <article><span>Visites</span><strong id="detailVisits"></strong></article>
+      <article><span>Heures réalisées</span><strong id="detailWork"></strong></article>
+      <article><span>Trajets réalisés</span><strong id="detailTravel"></strong></article>
+      <article><span>Visites réalisées</span><strong id="detailVisits"></strong></article>
     </div>
     <h3>Historique des interventions</h3>
     <div id="detailHistory" class="history"></div>
@@ -394,6 +426,7 @@
       <button type="button" class="close-button" data-close="dataDialog" aria-label="Fermer">×</button>
     </div>
     <p class="helper">La sauvegarde JSON contient les fiches bénéficiaires et toutes les interventions, y compris les horaires, les trajets et les notes. Conservez ce fichier dans un endroit privé.</p>
+    <p class="helper backup-date" id="lastBackupText"></p>
     <button id="backupBtn" class="primary-button full" type="button">Télécharger la sauvegarde JSON</button>
     <button id="chooseBackupBtn" class="secondary-button full" type="button">Importer une sauvegarde JSON</button>
     <input id="restoreInput" type="file" accept=".json,application/json" hidden>
@@ -406,10 +439,30 @@
       <button id="replaceBackupBtn" class="secondary-button full" type="button">Remplacer les données actuelles…</button>
     </section>
     <button id="recoveryBackupBtn" class="secondary-button full" type="button" hidden>Télécharger la copie d’avant remplacement</button>
+    <button id="openTrashBtn" class="secondary-button full" type="button">Corbeille des interventions</button>
     <div class="data-export">
       <p class="helper">Pour consulter les heures dans un tableur, exportez le mois affiché.</p>
       <button id="exportCsvBtn" class="secondary-button full" type="button">Exporter le mois en CSV</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="trashDialog" class="sheet-dialog settings-dialog" aria-labelledby="trashTitle">
+  <div class="modal-card">
+    <div class="modal-header"><h2 id="trashTitle">Corbeille des interventions</h2><button type="button" class="close-button" data-close="trashDialog" aria-label="Fermer">×</button></div>
+    <p class="helper">Les visites restaurées reprennent leur date, leur horaire et leur statut.</p>
+    <div id="trashList" class="trash-list"></div>
+    <p id="trashMessage" class="import-message" role="status" hidden></p>
+  </div>
+</dialog>
+
+<dialog id="reportDialog" class="sheet-dialog report-dialog" aria-labelledby="reportTitle">
+  <div class="modal-card">
+    <div class="modal-header report-controls"><h2 id="reportTitle">Relevé mensuel</h2><button type="button" class="close-button" data-close="reportDialog" aria-label="Fermer">×</button></div>
+    <label class="repeat-toggle report-controls"><input type="checkbox" id="reportHideNames"> Masquer les noms des bénéficiaires</label>
+    <article id="reportDocument" class="report-document" aria-label="Relevé des heures réalisées"></article>
+    <button id="printReportBtn" class="primary-button full report-controls" type="button">Imprimer ou enregistrer en PDF</button>
+    <p class="helper report-controls report-hint">Choisissez l’option PDF dans le menu d’impression de l’appareil.</p>
   </div>
 </dialog>
 
@@ -451,7 +504,7 @@
       </div>
       <button type="button" class="close-button" data-close="aboutDialog">×</button>
     </div>
-    <p><strong>AidePlanning 13</strong> aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
+    <p><strong>AidePlanning 14</strong> aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
     <p>L’application fonctionne hors ligne, sans publicité et sans abonnement.</p>
     <p class="helper">Les informations sont enregistrées localement sur l’appareil.</p>
   </div>
@@ -488,11 +541,11 @@
 <dialog id="supportDialog" class="sheet-dialog"><div class="modal-card info-panel centered-panel"><div class="modal-header"><div><p class="section-kicker">SOUTIEN</p><h2>Soutenir le projet</h2></div><button type="button" class="close-button" data-close="supportDialog">×</button></div><div class="large-emoji">☕</div><p>Si AidePlanning vous aide au quotidien, vous pourrez bientôt soutenir son développement.</p><p class="helper">Cette rubrique est prête pour un futur lien PayPal, Ko-fi ou Buy Me a Coffee.</p></div></dialog>
 <dialog id="whatsNewDialog" class="sheet-dialog">
   <div class="modal-card">
-    <div class="modal-header"><div><p class="section-kicker">Version 13</p><h2>Nouveautés</h2></div><button type="button" class="close-button" data-close="whatsNewDialog" aria-label="Fermer">×</button></div>
+    <div class="modal-header"><div><p class="section-kicker">Version 14</p><h2>Nouveautés</h2></div><button type="button" class="close-button" data-close="whatsNewDialog" aria-label="Fermer">×</button></div>
     <div class="whats-new-list">
-      <article><span aria-hidden="true">◫</span><div><strong>Les noms dans le calendrier</strong><p>Retrouvez chaque bénéficiaire grâce à sa couleur, modifiable dans sa fiche.</p></div></article>
-      <article><span aria-hidden="true">≡</span><div><strong>Une vue semaine sur téléphone</strong><p>Les noms et les horaires s’affichent en entier. Touchez une visite pour la modifier.</p></div></article>
-      <article><span aria-hidden="true">⇩</span><div><strong>Import de vos anciennes sauvegardes</strong><p>Vérifiez le contenu du fichier avant d’ajouter les données manquantes.</p></div></article>
+      <article><span aria-hidden="true">◫</span><div><strong>Déplacer et répéter les visites</strong><p>Modifiez la date, dupliquez une visite ou programmez une répétition hebdomadaire.</p></div></article>
+      <article><span aria-hidden="true">≡</span><div><strong>Heures réalisées et relevé mensuel</strong><p>Le statut de chaque visite distingue le planning du travail effectué.</p></div></article>
+      <article><span aria-hidden="true">⇩</span><div><strong>Historique récupérable</strong><p>Archivez les bénéficiaires et restaurez les visites depuis la corbeille.</p></div></article>
     </div>
   </div>
 </dialog>
@@ -505,8 +558,10 @@
   <div class="modal-card success-card"><div class="success-check">✓</div><h2>Merci !</h2><p id="feedbackSuccessText">Votre retour a bien été envoyé.</p><button type="button" class="primary-button full" data-close="feedbackSuccessDialog">Terminer</button></div>
 </dialog>
 
-<div id="toast" class="toast" role="status"></div>
-<script src="data.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<section id="printedReport" class="report-document" aria-hidden="true"></section>
+<div id="toast" class="toast"><span id="toastText" role="status"></span><button id="toastAction" type="button" hidden></button></div>
+<script src="data.js?v=14"></script>
+<script src="workflows.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

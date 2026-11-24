@@ -6,6 +6,7 @@ const RECENT_KEY="aideplanning_recent_people";
 const VIEW_KEY="aideplanning_planning_view";
 const RECOVERY_KEY="aideplanning_before_restore";
 let db=loadDatabase();
+let storedDatabaseText=localStorage.getItem(KEY);
 let currentMonth=new Date(),selectedDate=new Date(),editingVisitId=null,editingPersonId=null;
 const savedView=localStorage.getItem(VIEW_KEY);
 let planningView=["week","month"].includes(savedView)?savedView:matchMedia("(max-width: 700px)").matches?"week":"month";
@@ -14,11 +15,9 @@ let recentPeople=Array.isArray(savedRecent)?savedRecent:[];
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,"0");
-const dateKey=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const uid=p=>`${p}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+const dateKey=planningDateKey;
+const uid=p=>`${p}_${globalThis.crypto?.randomUUID?.()||`${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
 const person=id=>db.people.find(p=>p.id===id);
-const parseTime=t=>{if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m};
-const duration=(a,b)=>{let x=parseTime(a),y=parseTime(b);if(y<x)y+=1440;return Math.max(0,y-x)};
 const fmt=m=>`${Math.floor(m/60)}h${pad(m%60)}`;
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fullDay=d=>d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
@@ -38,30 +37,43 @@ function loadDatabase(){
       if(stored===null)continue;
       parsed=parsePlanningBackup(stored);
     }catch{continue}
-    const data=assignBeneficiaryColors(parsed);
-    if(key!==KEY||parsed.people.some(p=>!validColors.has(p.color))){
+    const data=preparePlanningData(parsed);
+    if(key!==KEY||!Array.isArray(parsed.trash)||parsed.people.some(p=>!validColors.has(p.color))||Object.values(parsed.visits).some(day=>day.some(visit=>!visit.status))){
       try{localStorage.setItem(KEY,JSON.stringify(data))}catch{/* Keep the readable data if storage is full. */}
     }
     return data;
   }
-  return {people:[],visits:{}};
+  return {people:[],visits:{},trash:[]};
 }
-function save(){localStorage.setItem(KEY,JSON.stringify(db))}
-function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove("show"),2100)}
+function storePlanning(next,expected=storedDatabaseText){
+  if(localStorage.getItem(KEY)!==expected)throw new Error("Les données ont changé dans un autre onglet. Rouvrez l’application pour les retrouver.");
+  const serialized=JSON.stringify(next);
+  try{localStorage.setItem(KEY,serialized)}catch{throw new Error("Enregistrement impossible. Vérifiez l’espace disponible sur l’appareil.")}
+  storedDatabaseText=serialized;
+  db=next;
+}
+function toast(message,action){
+  const notice=$("toast"),button=$("toastAction");
+  $("toastText").textContent=message;
+  button.hidden=!action;
+  button.textContent=action?.label||"";
+  button.onclick=action?.run||null;
+  notice.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer=setTimeout(()=>{notice.classList.remove("show");button.hidden=true},action?12000:3200);
+}
 function monthPrefix(){return `${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}-`}
 function monthVisits(){return Object.entries(db.visits).filter(([d])=>d.startsWith(monthPrefix())).flatMap(([date,v])=>v.map(x=>({...x,date})))}
 function visitTravel(v){return parseTime(v.travel||"00:00")}
 function orderedVisits(date){return [...(db.visits[date]||[])].sort((a,b)=>a.start.localeCompare(b.start))}
-function overlapPairs(visits){
-  const sorted=[...visits].sort((a,b)=>a.start.localeCompare(b.start)),pairs=[];
-  for(let i=0;i<sorted.length-1;i++)if(parseTime(sorted[i+1].start)<parseTime(sorted[i].end))pairs.push([sorted[i],sorted[i+1]]);
-  return pairs;
-}
 function rememberRecentPerson(id){
   recentPeople=[id,...recentPeople.filter(x=>x!==id)].slice(0,6);
-  localStorage.setItem(RECENT_KEY,JSON.stringify(recentPeople));
+  try{localStorage.setItem(RECENT_KEY,JSON.stringify(recentPeople))}catch{/* The visit is independent of this shortcut. */}
 }
-function render(){renderPlanning();renderDay();renderPeople();renderStats();renderRecent()}
+function render(){
+  renderPlanning();renderDay();renderPeople();renderStats();renderRecent();renderBackupReminder();
+  if($("trashDialog").open)renderTrash();
+}
 
 function addDays(date,number){
   const day=new Date(date);
@@ -88,10 +100,11 @@ function renderPlanning(){
   const start=mondayOf(selectedDate);
   const days=Array.from({length:7},(_,i)=>addDays(start,i));
   const visits=weekly?days.flatMap(day=>orderedVisits(dateKey(day))):monthVisits();
+  const totals=visitTotals(visits);
   $("periodTitle").textContent=weekly?weekTitle(start,days[6]):currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
-  $("periodVisits").textContent=visits.length;
-  $("periodWork").textContent=fmt(visits.reduce((sum,v)=>sum+duration(v.start,v.end),0));
-  $("periodTravel").textContent=fmt(visits.reduce((sum,v)=>sum+visitTravel(v),0));
+  $("periodPlanned").textContent=fmt(totals.planned);
+  $("periodWork").textContent=fmt(totals.done);
+  $("periodTravel").textContent=fmt(totals.travel);
   if(weekly)renderWeek(days);
   else renderCalendar();
   markSelectedDay();
@@ -105,12 +118,13 @@ function renderCalendar(){
   for(let d=1;d<=days;d++){
     const dt=new Date(y,m,d),key=dateKey(dt),visits=orderedVisits(key);
     const names=visits.map(visit=>person(visit.personId));
-    const namesLabel=names.map(beneficiaryName).join(", ");
-    const warning=overlapPairs(visits).length>0;
+    const namesLabel=visits.map((visit,index)=>`${beneficiaryName(names[index])} (${statusLabel(visit).toLowerCase()})`).join(", ");
+    const warning=conflictsOnDate(db.visits,key).length>0;
     const count=visits.length;
     const label=[fullDay(dt),visitCount(count),namesLabel,warning?"horaires qui se chevauchent":""].filter(Boolean).join(". ");
-    const chips=names.slice(0,3).map(p=>`<span class="calendar-visit" data-color="${colorOf(p)}">${esc(beneficiaryName(p))}</span>`).join("");
-    const work=fmt(visits.reduce((sum,v)=>sum+duration(v.start,v.end),0));
+    const chips=visits.slice(0,3).map((visit,index)=>`<span class="calendar-visit" data-color="${colorOf(names[index])}" data-status="${visit.status}">${esc(beneficiaryName(names[index]))}</span>`).join("");
+    const totals=visitTotals(visits);
+    const work=fmt(totals.planned+totals.done);
     cells.push(`<button type="button" class="day${key===today?" today":""}${count?" has-visits":""}" data-day-select="${key}" aria-label="${esc(label)}"${namesLabel?` title="${esc(namesLabel)}"`:""}${key===today?' aria-current="date"':""}>
       <span class="day-top"><strong class="day-number">${d}</strong>${count?`<span class="day-duration">${work}</span>`:""}${warning?'<span class="calendar-warning" aria-hidden="true">!</span>':""}</span>
       ${count?`<span class="day-meta">${visitCount(count)}</span>${chips}`:""}
@@ -126,11 +140,11 @@ function renderWeek(days){
     const key=dateKey(day),visits=orderedVisits(key),label=fullDay(day);
     const rows=visits.map(visit=>{
       const p=person(visit.personId);
-      return `<button type="button" class="agenda-visit" data-visit-date="${key}" data-visit-id="${esc(visit.id)}" data-color="${colorOf(p)}">
-        <span class="agenda-name">${esc(beneficiaryName(p))}</span><span class="agenda-time">${visit.start}–${visit.end}</span>
+      return `<button type="button" class="agenda-visit" data-visit-date="${key}" data-visit-id="${esc(visit.id)}" data-color="${colorOf(p)}" data-status="${visit.status}">
+        <span class="agenda-name">${esc(beneficiaryName(p))}</span><span class="agenda-meta"><span class="agenda-time">${visit.start}–${visit.end}</span>${statusBadge(visit)}</span>
       </button>`;
     }).join("");
-    const warning=overlapPairs(visits).length>0;
+    const warning=conflictsOnDate(db.visits,key).length>0;
     return `<article class="panel agenda-day" data-agenda-day="${key}">
       <div class="agenda-heading">
         <button class="agenda-date" type="button" data-day-select="${key}"${key===today?' aria-current="date"':""}>
@@ -168,56 +182,67 @@ function selectPlanningDay(event){
   heading.scrollIntoView({block:"nearest"});
 }
 function renderDay(){
-  const visits=orderedVisits(dateKey(selectedDate)),work=visits.reduce((s,v)=>s+duration(v.start,v.end),0),travel=visits.reduce((s,v)=>s+visitTravel(v),0);
+  const key=dateKey(selectedDate),visits=orderedVisits(key),totals=visitTotals(visits);
   $("selectedDateTitle").textContent=fullDay(selectedDate);
-  $("dayWorkTotal").textContent=fmt(work);$("dayTravelTotal").textContent=`Trajet ${fmt(travel)}`;
-  const overlaps=overlapPairs(visits);
-  $("dayWarnings").innerHTML=overlaps.length?`<div class="warning-box">⚠️ ${overlaps.length} chevauchement${overlaps.length>1?"s":""} détecté${overlaps.length>1?"s":""}.</div>`:"";
+  $("dayWorkTotal").textContent=`${fmt(totals.done)} réalisé`;
+  $("dayPlannedTotal").textContent=`${fmt(totals.planned)} prévu`;
+  $("dayTravelTotal").textContent=`Trajets réalisés ${fmt(totals.travel)}`;
+  const overlaps=conflictsOnDate(db.visits,key);
+  const description=({date,visit})=>`${esc(beneficiaryName(person(visit.personId)))} ${date!==key?`${visitIsoLabel(date,{day:"numeric",month:"short"})} `:""}(${visit.start}–${visit.end})`;
+  $("dayWarnings").innerHTML=overlaps.length?`<details class="warning-box"><summary>${overlaps.length} chevauchement${overlaps.length>1?"s":""} à vérifier</summary><ul>${overlaps.map(([a,b])=>`<li>${description(a)} et ${description(b)}</li>`).join("")}</ul></details>`:"";
   const list=$("visitsList");list.innerHTML="";
   if(!visits.length){list.innerHTML='<div class="empty-state">Aucune intervention pour cette journée.</div>';return}
   visits.forEach(v=>{
     const p=person(v.personId),b=document.createElement("button");b.className="visit-card";b.dataset.color=colorOf(p);
-    b.innerHTML=`<div><h3>${esc(beneficiaryName(p))}</h3><div class="visit-time">${v.start} – ${v.end}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong><span>Trajet ${fmt(visitTravel(v))}</span></div>`;
+    b.innerHTML=`<div><h3>${esc(beneficiaryName(p))}</h3><div class="visit-time">${v.start} – ${v.end}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div><div class="visit-side">${statusBadge(v)}<strong>${fmt(duration(v.start,v.end))}</strong><small>Trajet ${fmt(visitTravel(v))}</small></div>`;
     b.onclick=()=>openVisit(v.id);list.appendChild(b);
   });
 }
 function renderPeople(){
   const q=$("personSearch").value.trim().toLowerCase(),list=$("peopleList");list.innerHTML="";
-  const filtered=[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).filter(p=>(p.name+" "+(p.address||"")+" "+(p.phone||"")).toLowerCase().includes(q));
-  if(!filtered.length){list.innerHTML='<div class="panel empty-state">Aucun bénéficiaire enregistré.</div>';return}
+  $("activePeopleBtn").setAttribute("aria-pressed",String(!showArchivedPeople));
+  $("archivedPeopleBtn").setAttribute("aria-pressed",String(showArchivedPeople));
+  const filtered=db.people.filter(p=>Boolean(p.archived)===showArchivedPeople&&(p.name+" "+(p.address||"")+" "+(p.phone||"")).toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  if(!filtered.length){list.innerHTML=`<div class="panel empty-state">${q?"Aucun résultat.":showArchivedPeople?"Aucun bénéficiaire archivé.":"Aucun bénéficiaire actif."}</div>`;return}
   filtered.forEach(p=>{
     const all=Object.entries(db.visits).flatMap(([date,v])=>v.filter(x=>x.personId===p.id).map(x=>({...x,date})));
     const card=document.createElement("article");card.className="person-card";
-    card.innerHTML=`<h3 class="person-heading" data-color="${colorOf(p)}"><span aria-hidden="true"></span>${esc(p.name)}</h3><div class="person-meta">${p.address?`📍 ${esc(p.address)}<br>`:""}${p.phone?`📞 ${esc(p.phone)}<br>`:""}${all.length} intervention${all.length===1?"":"s"} · ${fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0))}</div><div class="person-actions"><button class="mini-button detail">Voir la fiche</button><button class="mini-button edit">Modifier</button></div>`;
+    card.innerHTML=`<h3 class="person-heading" data-color="${colorOf(p)}"><span aria-hidden="true"></span>${esc(p.name)}</h3><div class="person-meta">${p.address?`📍 ${esc(p.address)}<br>`:""}${p.phone?`📞 ${esc(p.phone)}<br>`:""}${visitCount(all.length)} · ${fmt(visitTotals(all).done)} réalisé</div><div class="person-actions"><button class="mini-button detail">Voir la fiche</button><button class="mini-button edit">Modifier</button></div>`;
     card.querySelector(".detail").onclick=()=>openPersonDetail(p.id);card.querySelector(".edit").onclick=()=>openPerson(p.id);list.appendChild(card);
   });
 }
 function mondayOf(date){const d=new Date(date),day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(12,0,0,0);return d}
 function renderStats(){
-  const mv=monthVisits(),work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
+  const mv=monthVisits(),done=mv.filter(visit=>visit.status==="done"),summary=visitTotals(mv);
   $("statsTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
-  $("statWork").textContent=fmt(work);$("statTravel").textContent=fmt(travel);$("statVisits").textContent=mv.length;$("statDays").textContent=new Set(mv.map(v=>v.date)).size;
-  const totals=new Map();mv.forEach(v=>totals.set(v.personId,(totals.get(v.personId)||0)+duration(v.start,v.end)));
-  $("personStats").innerHTML=[...totals].sort((a,b)=>b[1]-a[1]).map(([id,m])=>`<div class="person-stat"><span>${esc(beneficiaryName(person(id)))}</span><strong>${fmt(m)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
-  const weeks={};mv.forEach(v=>{const k=dateKey(mondayOf(new Date(v.date+"T12:00:00")));weeks[k]??={work:0,travel:0};weeks[k].work+=duration(v.start,v.end);weeks[k].travel+=visitTravel(v)});
-  $("weekStats").innerHTML=Object.entries(weeks).sort().map(([k,w])=>`<div class="week-stat"><span>Semaine du ${new Date(k+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span><strong>${fmt(w.work)} + ${fmt(w.travel)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
+  $("statWork").textContent=fmt(summary.done);
+  $("statPlanned").textContent=fmt(summary.planned);
+  $("statTravel").textContent=fmt(summary.travel);
+  $("statVisits").textContent=summary.doneCount;
+  $("statCancelled").textContent=summary.cancelledCount;
+  $("statDays").textContent=new Set(done.map(v=>v.date)).size;
+  const totals=new Map();done.forEach(v=>totals.set(v.personId,(totals.get(v.personId)||0)+duration(v.start,v.end)));
+  $("personStats").innerHTML=[...totals].sort((a,b)=>b[1]-a[1]).map(([id,m])=>`<div class="person-stat"><span>${esc(beneficiaryName(person(id)))}</span><strong>${fmt(m)}</strong></div>`).join("")||'<div class="empty-state">Aucune visite réalisée ce mois-ci.</div>';
+  const weeks={};done.forEach(v=>{const k=dateKey(mondayOf(new Date(v.date+"T12:00:00")));weeks[k]??={work:0,travel:0};weeks[k].work+=duration(v.start,v.end);weeks[k].travel+=visitTravel(v)});
+  $("weekStats").innerHTML=Object.entries(weeks).sort().map(([k,w])=>`<div class="week-stat"><span>Semaine du ${new Date(k+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span><strong>${fmt(w.work)} · Trajet ${fmt(w.travel)}</strong></div>`).join("")||'<div class="empty-state">Aucune visite réalisée ce mois-ci.</div>';
 }
 function renderRecent(){
   const recent=recentPeople.map(person).filter(Boolean);
   $("recentPeopleList").innerHTML=recent.length?recent.map(p=>`<button class="picker-person recent-person" data-person-id="${esc(p.id)}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`).join(""):'<div class="empty-state">Aucun bénéficiaire récent.</div>';
   document.querySelectorAll(".recent-person").forEach(b=>b.onclick=()=>openPersonDetail(b.dataset.personId));
-  const all=Object.entries(db.visits).flatMap(([date,v])=>v.map(x=>({...x,date}))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start)).slice(0,8);
-  $("recentVisitsList").innerHTML=all.length?all.map(v=>`<button class="visit-card recent-visit" data-date="${v.date}" data-id="${esc(v.id)}"><div><h3>${esc(beneficiaryName(person(v.personId)))}</h3><div class="visit-time">${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} · ${v.start} → ${v.end}</div></div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong></div></button>`).join(""):'<div class="empty-state">Aucune intervention récente.</div>';
+  const today=dateKey(new Date());
+  const all=Object.entries(db.visits).filter(([date])=>date<=today).flatMap(([date,v])=>v.map(x=>({...x,date}))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start)).slice(0,8);
+  $("recentVisitsList").innerHTML=all.length?all.map(v=>`<button class="visit-card recent-visit" data-date="${v.date}" data-id="${esc(v.id)}"><div><h3>${esc(beneficiaryName(person(v.personId)))}</h3><div class="visit-time">${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} · ${v.start} → ${v.end}</div></div><div class="visit-side">${statusBadge(v)}<strong>${fmt(duration(v.start,v.end))}</strong></div></button>`).join(""):'<div class="empty-state">Aucune intervention récente.</div>';
   document.querySelectorAll(".recent-visit").forEach(b=>b.onclick=()=>{selectedDate=new Date(b.dataset.date+"T12:00:00");currentMonth=new Date(selectedDate);showPage("planningPage");render();setTimeout(()=>openVisit(b.dataset.id),50)});
 }
-function updateVisitPersonButton(id=""){const p=person(id);$("visitPerson").value=id||"";$("visitPersonLabel").textContent=p?.name||"Choisir une personne"}
+function updateVisitPersonButton(id=""){const p=person(id);$("visitPerson").value=id||"";$("visitPersonLabel").textContent=p?`${p.name}${p.archived?" (archivé)":""}`:"Choisir une personne"}
 function pickerPersonButton(p){return `<button type="button" class="picker-person" data-person-id="${esc(p.id)}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`}
 function bindPickerButtons(){document.querySelectorAll("#personPickerDialog .picker-person").forEach(b=>b.onclick=()=>{updateVisitPersonButton(b.dataset.personId);rememberRecentPerson(b.dataset.personId);$("personPickerDialog").close()})}
 function renderPersonPicker(){
-  const recent=recentPeople.map(person).filter(Boolean);
+  const recent=recentPeople.map(person).filter(p=>p&&!p.archived);
   $("pickerRecentList").innerHTML=recent.length?recent.map(pickerPersonButton).join(""):'<div class="empty-state">Aucun bénéficiaire récent.</div>';
   const q=$("pickerSearch").value.trim().toLowerCase();
-  const all=[...db.people].sort((a,b)=>a.name.localeCompare(b.name,"fr")).filter(p=>(p.name+" "+(p.phone||"")).toLowerCase().includes(q));
+  const all=db.people.filter(p=>!p.archived&&(p.name+" "+(p.phone||"")).toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name,"fr"));
   $("pickerAllList").innerHTML=all.length?all.map(pickerPersonButton).join(""):'<div class="empty-state">Aucun bénéficiaire trouvé.</div>';
   bindPickerButtons();
 }
@@ -225,29 +250,25 @@ function setPickerTab(tab){
   document.querySelectorAll(".segment").forEach(b=>b.classList.toggle("active",b.dataset.pickerTab===tab));
   $("pickerRecentPanel").classList.toggle("active",tab==="recent");$("pickerAllPanel").classList.toggle("active",tab==="all");$("pickerNewPanel").classList.toggle("active",tab==="new");
 }
-function openVisit(id=null){
-  const v=(db.visits[dateKey(selectedDate)]||[]).find(x=>x.id===id);
-  editingVisitId=v?.id||null;
-  $("visitDialogTitle").textContent=v?"Modifier l’intervention":"Ajouter une intervention";
-  $("visitDialogDate").textContent=fullDay(selectedDate);
-  updateVisitPersonButton(v?.personId||"");$("visitStart").value=v?.start||"08:00";$("visitEnd").value=v?.end||"09:00";$("visitTravel").value=v?.travel||"00:00";$("visitNote").value=v?.note||"";
-  $("deleteVisitBtn").style.display=v?"block":"none";$("visitDialog").showModal();
-}
 function openPerson(id=null){
   editingPersonId=id;const p=person(id);
   $("personDialogTitle").textContent=p?"Modifier le bénéficiaire":"Ajouter un bénéficiaire";
   $("personName").value=p?.name||"";$("personAddress").value=p?.address||"";$("personPhone").value=p?.phone||"";$("personNotes").value=p?.notes||"";
   $("personColor").value=p?.color||leastUsedColor(db.people);
   $("personColor").dataset.color=$("personColor").value;
-  $("deletePersonBtn").style.display=p?"block":"none";$("personDialog").showModal();
+  $("archivePersonBtn").hidden=!p;
+  $("archivePersonBtn").textContent=p?.archived?"Réactiver":"Archiver";
+  setVisitNotice("personError", "");
+  $("personDialog").showModal();
 }
 function openPersonDetail(id){
   const p=person(id);if(!p)return;
   const all=Object.entries(db.visits).flatMap(([date,v])=>v.filter(x=>x.personId===id).map(x=>({...x,date}))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start));
-  $("detailName").textContent=p.name;
+  $("detailName").textContent=p.archived?`${p.name} · Archivé`:p.name;
   $("detailContact").innerHTML=`${p.address?`<div>📍 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}" target="_blank">${esc(p.address)}</a></div>`:""}${p.phone?`<div>📞 <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a></div>`:""}${p.notes?`<div>📝 ${esc(p.notes)}</div>`:""}`;
-  $("detailWork").textContent=fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0));$("detailTravel").textContent=fmt(all.reduce((s,v)=>s+visitTravel(v),0));$("detailVisits").textContent=all.length;
-  $("detailHistory").innerHTML=all.map(v=>`<div class="history-item"><div class="row"><strong>${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}</strong><span>${fmt(duration(v.start,v.end))}</span></div><div>${v.start} → ${v.end} · trajet ${fmt(visitTravel(v))}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div>`).join("")||'<div class="empty-state">Aucune intervention.</div>';
+  const summary=visitTotals(all);
+  $("detailWork").textContent=fmt(summary.done);$("detailTravel").textContent=fmt(summary.travel);$("detailVisits").textContent=summary.doneCount;
+  $("detailHistory").innerHTML=all.map(v=>`<div class="history-item"><div class="row"><strong>${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}</strong>${statusBadge(v)}</div><div>${v.start} → ${v.end} · trajet ${fmt(visitTravel(v))}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div>`).join("")||'<div class="empty-state">Aucune intervention.</div>';
   $("personDetailDialog").showModal();
 }
 function showPage(id){
@@ -281,25 +302,42 @@ function applyAppearance(palette,mode){
   document.querySelector('meta[name="theme-color"]').setAttribute("content",mode==="dark"?"#211e27":paletteColors[palette]);
 }
 
-$("visitForm").onsubmit=e=>{
-  e.preventDefault();const k=dateKey(selectedDate),payload={personId:$("visitPerson").value,start:$("visitStart").value,end:$("visitEnd").value,travel:$("visitTravel").value||"00:00",note:$("visitNote").value.trim()};
-  if(!person(payload.personId))return toast("Choisis un bénéficiaire.");if(duration(payload.start,payload.end)<=0)return toast("Les horaires sont invalides.");
-  db.visits[k]??=[];
-  if(editingVisitId){const i=db.visits[k].findIndex(v=>v.id===editingVisitId);db.visits[k][i]={...db.visits[k][i],...payload}}else db.visits[k].push({id:uid("visit"),...payload});
-  rememberRecentPerson(payload.personId);save();$("visitDialog").close();render();toast("Intervention enregistrée.");
-};
-$("deleteVisitBtn").onclick=()=>{const k=dateKey(selectedDate);db.visits[k]=(db.visits[k]||[]).filter(v=>v.id!==editingVisitId);if(!db.visits[k].length)delete db.visits[k];save();$("visitDialog").close();render();toast("Intervention supprimée.")};
 $("personColor").replaceChildren(...BENEFICIARY_COLORS.map(([color,label])=>new Option(label,color)));
 $("personColor").onchange=e=>{e.target.dataset.color=e.target.value};
-$("personForm").onsubmit=e=>{e.preventDefault();const payload={name:$("personName").value.trim(),address:$("personAddress").value.trim(),phone:$("personPhone").value.trim(),notes:$("personNotes").value.trim(),color:$("personColor").value};if(!payload.name)return toast("Le nom est obligatoire.");if(editingPersonId){const i=db.people.findIndex(p=>p.id===editingPersonId);db.people[i]={...db.people[i],...payload}}else db.people.push({id:uid("person"),...payload});save();$("personDialog").close();render();toast("Bénéficiaire enregistré.")};
-$("deletePersonBtn").onclick=()=>{if(!confirm("Supprimer ce bénéficiaire et ses interventions ?"))return;db.people=db.people.filter(p=>p.id!==editingPersonId);Object.keys(db.visits).forEach(k=>{db.visits[k]=db.visits[k].filter(v=>v.personId!==editingPersonId);if(!db.visits[k].length)delete db.visits[k]});save();$("personDialog").close();render();toast("Bénéficiaire supprimé.")};
-$("visitPersonButton").onclick=()=>{renderPersonPicker();setPickerTab(recentPeople.some(id=>person(id))?"recent":db.people.length?"all":"new");$("personPickerDialog").showModal()};
+$("personForm").onsubmit=e=>{
+  e.preventDefault();
+  const payload={name:$("personName").value.trim(),address:$("personAddress").value.trim(),phone:$("personPhone").value.trim(),notes:$("personNotes").value.trim(),color:$("personColor").value};
+  if(!payload.name)return setVisitNotice("personError","Le nom est obligatoire.");
+  const people=editingPersonId?db.people.map(p=>p.id===editingPersonId?{...p,...payload}:p):[...db.people,{id:uid("person"),...payload}];
+  try{storePlanning({...db,people})}catch(error){return setVisitNotice("personError",error.message)}
+  if(!editingPersonId)showArchivedPeople=false;
+  $("personDialog").close();render();toast("Bénéficiaire enregistré.");
+};
+$("visitPersonButton").onclick=()=>{
+  renderPersonPicker();
+  setPickerTab(recentPeople.some(id=>{const p=person(id);return p&&!p.archived})?"recent":db.people.some(p=>!p.archived)?"all":"new");
+  setVisitNotice("quickPersonError","");
+  $("personPickerDialog").showModal();
+};
 $("pickerSearch").oninput=renderPersonPicker;
 document.querySelectorAll(".segment").forEach(b=>b.onclick=()=>setPickerTab(b.dataset.pickerTab));
-$("quickAddPersonBtn").onclick=()=>{const name=$("quickPersonName").value.trim(),phone=$("quickPersonPhone").value.trim();if(!name)return toast("Le nom est obligatoire.");const p={id:uid("person"),name,address:"",phone,notes:"",color:leastUsedColor(db.people)};db.people.push(p);save();rememberRecentPerson(p.id);updateVisitPersonButton(p.id);$("quickPersonName").value="";$("quickPersonPhone").value="";$("personPickerDialog").close();render();toast("Bénéficiaire créé.")};
+$("quickAddPersonBtn").onclick=()=>{
+  const name=$("quickPersonName").value.trim(),phone=$("quickPersonPhone").value.trim();
+  if(!name)return setVisitNotice("quickPersonError","Le nom est obligatoire.");
+  const p={id:uid("person"),name,address:"",phone,notes:"",color:leastUsedColor(db.people)};
+  try{storePlanning({...db,people:[...db.people,p]})}catch(error){return setVisitNotice("quickPersonError",error.message)}
+  rememberRecentPerson(p.id);updateVisitPersonButton(p.id);$("quickPersonName").value="";$("quickPersonPhone").value="";
+  $("personPickerDialog").close();render();
+};
 
 function movePeriod(direction){
-  selectedDate=planningView==="week"?addDays(selectedDate,direction*7):new Date(currentMonth.getFullYear(),currentMonth.getMonth()+direction,1);
+  if(planningView==="month")return moveMonth(direction);
+  selectedDate=addDays(selectedDate,direction*7);
+  currentMonth=new Date(selectedDate);
+  render();
+}
+function moveMonth(direction){
+  selectedDate=new Date(currentMonth.getFullYear(),currentMonth.getMonth()+direction,1);
   currentMonth=new Date(selectedDate);
   render();
 }
@@ -330,13 +368,21 @@ function download(content,name,type){
   link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-$("exportCsvBtn").onclick=()=>{const rows=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps de trajet","Note"]];monthVisits().sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)).forEach(v=>rows.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(duration(v.start,v.end)),fmt(visitTravel(v)),v.note||""]));download("\ufeff"+rows.map(r=>r.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),`aideplanning-${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}.csv`,"text/csv;charset=utf-8")};
+$("exportCsvBtn").onclick=()=>{
+  const rows=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps de trajet","Note","Statut","Durée du créneau"]];
+  monthVisits().sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)).forEach(visit=>{
+    const done=visit.status==="done",length=fmt(duration(visit.start,visit.end));
+    const textCell=value=>/^[\s\uFEFF]*[=+@-]/.test(value)?`'${value}`:value;
+    rows.push([visit.date,textCell(person(visit.personId)?.name||""),visit.start,visit.end,done?length:"",done?fmt(visitTravel(visit)):"",textCell(visit.note||""),statusLabel(visit),length]);
+  });
+  download("\ufeff"+rows.map(row=>row.map(cell=>`"${String(cell).replaceAll('"','""')}"`).join(";")).join("\n"),`aideplanning-${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}.csv`,"text/csv;charset=utf-8");
+};
 
 let selectedBackup=null;
 let backupReadVersion=0;
 
-function dataCountsLabel({people,visits}){
-  return `${people} bénéficiaire${people>1?"s":""} · ${visitCount(visits)}`;
+function dataCountsLabel({people,visits,trash}){
+  return `${people} bénéficiaire${people>1?"s":""} · ${visitCount(visits)}${trash?` · ${visitCount(trash)} dans la corbeille`:""}`;
 }
 
 function showImportMessage(message,error=false){
@@ -353,33 +399,32 @@ function refreshImportPreview(){
 
   const current=countPlanningData(db);
   const {additions}=mergePlanningData(db,selectedBackup);
-  const hasAdditions=additions.people>0||additions.visits>0;
+  const hasAdditions=additions.people>0||additions.visits>0||additions.trash>0;
   $("importCounts").textContent=dataCountsLabel(countPlanningData(selectedBackup));
   $("importAdditions").textContent=hasAdditions?`À ajouter · ${dataCountsLabel(additions)}. Les fiches et visites existantes sont conservées.`:"Toutes les fiches et visites de ce fichier sont déjà présentes.";
   $("mergeBackupBtn").disabled=!hasAdditions;
-  $("replaceBackupBtn").hidden=current.people===0&&current.visits===0;
+  $("replaceBackupBtn").hidden=current.people===0&&current.visits===0&&current.trash===0;
 }
 
 function importBackup(replace){
   if(!selectedBackup)return;
-  if(replace&&!confirm("Remplacer tous les bénéficiaires et toutes les interventions par cette sauvegarde ? AidePlanning conservera une copie des données actuelles."))return;
+  if(replace&&!confirm("Remplacer les bénéficiaires, les interventions et la corbeille par le contenu de cette sauvegarde ? AidePlanning conservera une copie des données actuelles."))return;
 
   let additions,next;
   try{
     const stored=localStorage.getItem(KEY);
     const current=stored===null?db:parsePlanningBackup(stored);
     if(replace){
-      next=assignBeneficiaryColors(selectedBackup);
+      next=preparePlanningData(selectedBackup);
       localStorage.setItem(RECOVERY_KEY,JSON.stringify(current));
     }else{
       ({data:next,additions}=mergePlanningData(current,selectedBackup));
     }
-    localStorage.setItem(KEY,JSON.stringify(next));
-  }catch{
-    showImportMessage("Impossible d’enregistrer l’import. Vérifiez l’espace disponible sur l’appareil et réessayez.",true);
+    storePlanning(next,stored);
+  }catch(error){
+    showImportMessage(error.message||"Impossible d’enregistrer l’import. Vérifiez l’espace disponible sur l’appareil.",true);
     return;
   }
-  db=next;
   selectedBackup=null;
   render();
   refreshImportPreview();
@@ -388,7 +433,6 @@ function importBackup(replace){
   $("chooseBackupBtn").focus();
 }
 
-$("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauvegarde-${dateKey(new Date())}.json`,"application/json");
 $("chooseBackupBtn").onclick=()=>$("restoreInput").click();
 $("restoreInput").onchange=async e=>{
   const [file]=e.target.files;
@@ -426,7 +470,7 @@ refreshImportPreview();
 const FEEDBACK_ENDPOINT="https://script.google.com/macros/s/AKfycbzE9UqtjOEAfOv7DEW3uQ3hboZbz6fQYC9UxOqEXeJiR5iRFtAcy-7Tk5OiM9iBJtTZXA/exec";
 const FEEDBACK_QUEUE_KEY="aideplanning_feedback_queue_v12";
 const FEEDBACK_HISTORY_KEY="aideplanning_feedback_history_v12";
-const APP_VERSION="13";
+const APP_VERSION="14";
 const feedbackConfigs={
   review:{type:"❤️ Avis",title:"Donner mon avis",emoji:"♥",intro:"Merci d’utiliser AidePlanning. Votre avis aide à améliorer l’application.",rating:true},
   bug:{type:"🐞 Bug",title:"Signaler un bug",emoji:"🐞",intro:"Décrivez précisément le problème rencontré afin qu’il puisse être corrigé.",rating:false},
@@ -579,4 +623,5 @@ if(!localStorage.getItem("aideplanning_onboarding_done")&&!db.people.length&&!co
   $("onboardingDialog").showModal();
 }
 if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
+bindWorkflows();
 render();
