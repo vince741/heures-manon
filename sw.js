@@ -1,5 +1,29 @@
-const CACHE="aideplanning-v12-1-premium";
-const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json","./icon.svg"];
-self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
-self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener("fetch",e=>{if(e.request.method!=="GET")return;e.respondWith(fetch(e.request).then(r=>{const c=r.clone();caches.open(CACHE).then(x=>x.put(e.request,c));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match("./index.html"))))});
+const SCOPE = new URL(self.registration.scope);
+const CACHE_PREFIX = `aideplanning:${SCOPE.href}:`;
+const CACHE = `${CACHE_PREFIX}v13`;
+const INDEX = new URL("index.html", SCOPE).href;
+const ASSETS = [INDEX, ...["style.css?v=13", "data.js?v=13", "app.js?v=13", "manifest.json", "icon.svg"].map(path => new URL(path, SCOPE).href)];
+
+self.addEventListener("install", event => {
+  const requests = ASSETS.map(url => new Request(url, { cache: "reload" }));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(requests)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE).map(key => caches.delete(key))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener("fetch", event => {
+  if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.origin !== SCOPE.origin) return;
+
+  const appNavigation = event.request.mode === "navigate" &&
+    (url.pathname === SCOPE.pathname || url.pathname === new URL(INDEX).pathname);
+  const asset = appNavigation ? INDEX : url.href;
+  if (!ASSETS.includes(asset)) return;
+
+  event.respondWith(caches.open(CACHE).then(cache => cache.match(asset)).then(cached => cached || fetch(event.request)));
+});

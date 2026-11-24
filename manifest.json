@@ -1,7 +1,7 @@
 {
-  "name": "AidePlanning V12.1 Premium",
+  "name": "AidePlanning",
   "short_name": "AidePlanning",
-  "description": "Planning Premium hors ligne avec installation guidée et centre d’assistance intégré",
+  "description": "Planning hors ligne des visites et des heures d’aide à domicile",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -2,7 +2,7 @@
 <html lang="fr" data-palette="rose" data-mode="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ff4f8b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,51 +11,70 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <div class="app-shell">
   <header class="topbar">
-    <div>
-      <p class="brand-kicker">AIDE À DOMICILE</p>
-      <h1>AidePlanning</h1>
+    <div class="app-brand">
+      <img src="icon.svg" width="42" height="42" alt="">
+      <div>
+        <p class="brand-kicker">Aide à domicile</p>
+        <h1>AidePlanning</h1>
+      </div>
     </div>
     <button id="todayBtn" class="top-action">Aujourd’hui</button>
   </header>
 
   <main>
     <section id="planningPage" class="page active">
-      <div class="month-header">
-        <button id="prevMonth" class="icon-button" aria-label="Mois précédent">‹</button>
-        <div>
-          <h2 id="monthTitle"></h2>
-          <p id="monthInfo"></p>
+      <section class="panel planning-toolbar" aria-label="Période affichée">
+        <div class="planning-controls">
+          <div class="period-heading">
+            <div class="period-arrows">
+              <button id="prevPeriod" class="icon-button" type="button" aria-label="Période précédente">‹</button>
+              <button id="nextPeriod" class="icon-button" type="button" aria-label="Période suivante">›</button>
+            </div>
+            <h2 id="periodTitle" aria-live="polite"></h2>
+          </div>
+          <div class="planning-view-switch" role="group" aria-label="Vue du planning">
+            <button type="button" data-planning-view="week" aria-pressed="false">Semaine</button>
+            <button type="button" data-planning-view="month" aria-pressed="false">Mois</button>
+          </div>
         </div>
-        <button id="nextMonth" class="icon-button" aria-label="Mois suivant">›</button>
+        <dl class="period-summary">
+          <div><dt>Visites</dt><dd id="periodVisits">0</dd></div>
+          <div><dt>Travail</dt><dd id="periodWork">0h00</dd></div>
+          <div><dt>Trajets</dt><dd id="periodTravel">0h00</dd></div>
+        </dl>
+      </section>
+
+      <div id="planningLayout" class="planning-layout">
+        <section id="monthCalendar" class="panel calendar-panel" aria-label="Calendrier du mois" hidden>
+          <div class="weekdays" aria-hidden="true">
+            <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
+          </div>
+          <div id="calendar" class="calendar"></div>
+        </section>
+
+        <section id="weekCalendar" class="week-calendar" aria-label="Planning de la semaine" hidden></section>
+
+        <section class="panel day-panel" aria-labelledby="selectedDateTitle">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Journée sélectionnée</p>
+              <h2 id="selectedDateTitle" tabindex="-1"></h2>
+            </div>
+            <div class="day-summary">
+              <strong id="dayWorkTotal">0h00</strong>
+              <span id="dayTravelTotal">Trajet 0h00</span>
+            </div>
+          </div>
+          <div id="dayWarnings"></div>
+          <div id="visitsList" class="visit-list"></div>
+          <button id="addVisitBtn" class="primary-button full">+ Ajouter une intervention</button>
+        </section>
       </div>
-
-      <section class="panel calendar-panel">
-        <div class="weekdays">
-          <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
-        </div>
-        <div id="calendar" class="calendar"></div>
-      </section>
-
-      <section class="panel day-panel">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">JOURNÉE</p>
-            <h2 id="selectedDateTitle"></h2>
-          </div>
-          <div class="day-summary">
-            <strong id="dayWorkTotal">0h00</strong>
-            <span id="dayTravelTotal">Trajet 0h00</span>
-          </div>
-        </div>
-        <div id="dayWarnings"></div>
-        <div id="visitsList" class="visit-list"></div>
-        <button id="addVisitBtn" class="primary-button full">+ Ajouter une intervention</button>
-      </section>
     </section>
 
     <section id="peoplePage" class="page">
@@ -67,7 +86,7 @@
         <button id="addPersonBtn" class="primary-button compact">+ Ajouter</button>
       </div>
       <section class="panel">
-        <input id="personSearch" class="search-input" type="search" placeholder="Rechercher un bénéficiaire">
+        <input id="personSearch" class="search-input" type="search" aria-label="Rechercher un bénéficiaire" placeholder="Rechercher un bénéficiaire">
       </section>
       <div id="peopleList"></div>
     </section>
@@ -115,23 +134,21 @@
         <h2>Plus</h2>
       </div>
 
-      <section class="welcome-card"><div class="welcome-icon">👋</div><p class="section-kicker">BIENVENUE</p><h2>Bonjour</h2><p>Merci d’utiliser AidePlanning.</p><div class="welcome-badges"><span>✓ Hors ligne</span><span>✓ Sauvegarde locale</span><span>✓ Gratuit</span></div></section>
-
       <section class="settings-group">
-        <button class="settings-row" data-open-settings="appearanceDialog">
-          <span class="settings-icon">◐</span>
-          <span class="settings-copy">
-            <strong>Apparence</strong>
-            <small id="appearanceSummary">Rose · Clair</small>
-          </span>
-          <span class="settings-chevron">›</span>
-        </button>
-
         <button class="settings-row" data-open-settings="dataDialog">
           <span class="settings-icon">⇩</span>
           <span class="settings-copy">
             <strong>Données et sauvegarde</strong>
             <small>Export, sauvegarde et restauration</small>
+          </span>
+          <span class="settings-chevron">›</span>
+        </button>
+
+        <button class="settings-row" data-open-settings="appearanceDialog">
+          <span class="settings-icon">◐</span>
+          <span class="settings-copy">
+            <strong>Apparence</strong>
+            <small id="appearanceSummary">Rose · Clair</small>
           </span>
           <span class="settings-chevron">›</span>
         </button>
@@ -151,7 +168,7 @@
         <button class="settings-row" data-open-feedback="contact"><span class="settings-icon">✉</span><span class="settings-copy"><strong>Contacter le développeur</strong><small>Envoyer une question ou demander un rappel</small></span><span class="settings-chevron">›</span></button>
         <button class="settings-row" data-open-settings="feedbackHistoryDialog"><span class="settings-icon">↻</span><span class="settings-copy"><strong>Historique des envois</strong><small>Consulter les retours envoyés ou en attente</small></span><span class="settings-chevron">›</span></button>
         <button class="settings-row" data-open-settings="supportDialog"><span class="settings-icon">☕</span><span class="settings-copy"><strong>Soutenir le projet</strong><small>Rubrique prête pour un futur lien</small></span><span class="settings-chevron">›</span></button>
-        <button class="settings-row" data-open-settings="whatsNewDialog"><span class="settings-icon">★</span><span class="settings-copy"><strong>Nouveautés</strong><small>Découvrir la version 12 Premium</small></span><span class="settings-chevron">›</span></button>
+        <button class="settings-row" data-open-settings="whatsNewDialog"><span class="settings-icon">★</span><span class="settings-copy"><strong>Nouveautés</strong><small>Découvrir la version 13</small></span><span class="settings-chevron">›</span></button>
         <button class="settings-row" data-open-settings="aboutDialog">
           <span class="settings-icon">i</span>
           <span class="settings-copy">
@@ -164,8 +181,8 @@
     </section>
   </main>
 
-  <nav class="bottom-nav">
-    <button data-page="planningPage" class="nav-button active"><span>◫</span><small>Planning</small></button>
+  <nav class="bottom-nav" aria-label="Navigation principale">
+    <button data-page="planningPage" class="nav-button active" aria-current="page"><span>◫</span><small>Planning</small></button>
     <button data-page="peoplePage" class="nav-button"><span>♙</span><small>Bénéficiaires</small></button>
     <button data-page="statsPage" class="nav-button"><span>⌁</span><small>Statistiques</small></button>
     <button data-page="recentPage" class="nav-button"><span>↶</span><small>Récent</small></button>
@@ -177,10 +194,10 @@
   <form id="visitForm" class="modal-card">
     <div class="modal-header">
       <div>
-        <p class="section-kicker">INTERVENTION</p>
+        <p id="visitDialogDate" class="section-kicker"></p>
         <h2 id="visitDialogTitle">Ajouter une intervention</h2>
       </div>
-      <button type="button" class="close-button" data-close="visitDialog">×</button>
+      <button type="button" class="close-button" data-close="visitDialog" aria-label="Fermer">×</button>
     </div>
 
     <label class="field">
@@ -259,11 +276,12 @@
         <p class="section-kicker">BÉNÉFICIAIRE</p>
         <h2 id="personDialogTitle">Ajouter</h2>
       </div>
-      <button type="button" class="close-button" data-close="personDialog">×</button>
+      <button type="button" class="close-button" data-close="personDialog" aria-label="Fermer">×</button>
     </div>
     <label class="field"><span>Nom</span><input id="personName" required placeholder="Mme Dupont"></label>
     <label class="field"><span>Adresse</span><input id="personAddress"></label>
     <label class="field"><span>Téléphone</span><input id="personPhone" type="tel"></label>
+    <label class="field"><span>Couleur dans le planning</span><select id="personColor" class="person-color"></select></label>
     <label class="field"><span>Informations utiles</span><textarea id="personNotes" rows="3"></textarea></label>
     <div class="modal-actions">
       <button type="button" id="deletePersonBtn" class="danger-button">Supprimer</button>
@@ -373,15 +391,25 @@
         <p class="section-kicker">RÉGLAGES</p>
         <h2>Données et sauvegarde</h2>
       </div>
-      <button type="button" class="close-button" data-close="dataDialog">×</button>
+      <button type="button" class="close-button" data-close="dataDialog" aria-label="Fermer">×</button>
     </div>
-    <p class="helper">Les données restent sur ce téléphone. Crée régulièrement une sauvegarde complète.</p>
-    <button id="exportCsvBtn" class="primary-button full">Exporter le mois en CSV</button>
-    <button id="backupBtn" class="secondary-button full">Créer une sauvegarde complète</button>
-    <label class="secondary-button full file-button">
-      Restaurer une sauvegarde
-      <input id="restoreInput" type="file" accept=".json,application/json">
-    </label>
+    <p class="helper">La sauvegarde JSON contient les fiches bénéficiaires et toutes les interventions, y compris les horaires, les trajets et les notes. Conservez ce fichier dans un endroit privé.</p>
+    <button id="backupBtn" class="primary-button full" type="button">Télécharger la sauvegarde JSON</button>
+    <button id="chooseBackupBtn" class="secondary-button full" type="button">Importer une sauvegarde JSON</button>
+    <input id="restoreInput" type="file" accept=".json,application/json" hidden>
+    <p id="importMessage" class="import-message" role="status" hidden></p>
+    <section id="importPreview" class="import-preview" aria-label="Aperçu de l’import" hidden>
+      <h3>Sauvegarde sélectionnée</h3>
+      <p id="importCounts"></p>
+      <p id="importAdditions"></p>
+      <button id="mergeBackupBtn" class="primary-button full" type="button">Ajouter les données manquantes</button>
+      <button id="replaceBackupBtn" class="secondary-button full" type="button">Remplacer les données actuelles…</button>
+    </section>
+    <button id="recoveryBackupBtn" class="secondary-button full" type="button" hidden>Télécharger la copie d’avant remplacement</button>
+    <div class="data-export">
+      <p class="helper">Pour consulter les heures dans un tableur, exportez le mois affiché.</p>
+      <button id="exportCsvBtn" class="secondary-button full" type="button">Exporter le mois en CSV</button>
+    </div>
   </div>
 </dialog>
 
@@ -423,7 +451,7 @@
       </div>
       <button type="button" class="close-button" data-close="aboutDialog">×</button>
     </div>
-    <p><strong>AidePlanning V12 Premium</strong> aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
+    <p><strong>AidePlanning 13</strong> aide à organiser les interventions, les bénéficiaires, les trajets et les statistiques.</p>
     <p>L’application fonctionne hors ligne, sans publicité et sans abonnement.</p>
     <p class="helper">Les informations sont enregistrées localement sur l’appareil.</p>
   </div>
@@ -435,21 +463,9 @@
     <div class="onboarding-logo">♥</div>
     <p class="section-kicker">BIENVENUE</p>
     <h1>AidePlanning</h1>
-    <p class="onboarding-text">Une application conçue pour simplifier le quotidien des aides à domicile.</p>
-    <div id="onboardingInstallWarning" class="onboarding-install-warning">
-      <span>📲</span>
-      <div>
-        <strong>Installation impérative</strong>
-        <p>Pour une sauvegarde locale plus fiable, installe l’application sur l’écran d’accueil avant de commencer.</p>
-        <small>Consulte ensuite <b>Plus → Installer l’application</b>.</small>
-      </div>
-    </div>
-    <div class="onboarding-points">
-      <span>✓ Fonctionne hors ligne</span>
-      <span>✓ Sauvegarde locale</span>
-      <span>✓ Sans abonnement</span>
-    </div>
-    <button id="startAppBtn" class="primary-button full">J’ai compris, commencer</button>
+    <p class="onboarding-text">Organisez vos interventions et retrouvez vos heures de travail et de trajet.</p>
+    <button id="startAppBtn" class="primary-button full" type="button">Commencer</button>
+    <button id="onboardingImportBtn" class="secondary-button full" type="button">J’ai déjà une sauvegarde</button>
   </div>
 </dialog>
 <dialog id="feedbackDialog" class="sheet-dialog">
@@ -470,7 +486,16 @@
   </form>
 </dialog>
 <dialog id="supportDialog" class="sheet-dialog"><div class="modal-card info-panel centered-panel"><div class="modal-header"><div><p class="section-kicker">SOUTIEN</p><h2>Soutenir le projet</h2></div><button type="button" class="close-button" data-close="supportDialog">×</button></div><div class="large-emoji">☕</div><p>Si AidePlanning vous aide au quotidien, vous pourrez bientôt soutenir son développement.</p><p class="helper">Cette rubrique est prête pour un futur lien PayPal, Ko-fi ou Buy Me a Coffee.</p></div></dialog>
-<dialog id="whatsNewDialog" class="sheet-dialog"><div class="modal-card"><div class="modal-header"><div><p class="section-kicker">VERSION 12</p><h2>Nouveautés</h2></div><button type="button" class="close-button" data-close="whatsNewDialog">×</button></div><div class="whats-new-list"><article><span>💬</span><div><strong>Formulaire entièrement intégré</strong><p>L’utilisateur envoie son retour sans ouvrir Google Forms.</p></div></article><article><span>☁️</span><div><strong>Envoi direct et gratuit</strong><p>Les messages arrivent dans Google Sheets grâce à Apps Script.</p></div></article><article><span>📴</span><div><strong>File d’attente hors ligne</strong><p>Un message non envoyé est conservé et renvoyé au retour de la connexion.</p></div></article><article><span>↻</span><div><strong>Historique des envois</strong><p>Les retours envoyés et en attente restent consultables sur l’appareil.</p></div></article><article><span>🔒</span><div><strong>Champs de contact obligatoires</strong><p>Prénom, téléphone et e-mail sont vérifiés avant l’envoi.</p></div></article></div></div></dialog>
+<dialog id="whatsNewDialog" class="sheet-dialog">
+  <div class="modal-card">
+    <div class="modal-header"><div><p class="section-kicker">Version 13</p><h2>Nouveautés</h2></div><button type="button" class="close-button" data-close="whatsNewDialog" aria-label="Fermer">×</button></div>
+    <div class="whats-new-list">
+      <article><span aria-hidden="true">◫</span><div><strong>Les noms dans le calendrier</strong><p>Retrouvez chaque bénéficiaire grâce à sa couleur, modifiable dans sa fiche.</p></div></article>
+      <article><span aria-hidden="true">≡</span><div><strong>Une vue semaine sur téléphone</strong><p>Les noms et les horaires s’affichent en entier. Touchez une visite pour la modifier.</p></div></article>
+      <article><span aria-hidden="true">⇩</span><div><strong>Import de vos anciennes sauvegardes</strong><p>Vérifiez le contenu du fichier avant d’ajouter les données manquantes.</p></div></article>
+    </div>
+  </div>
+</dialog>
 
 
 <dialog id="feedbackHistoryDialog" class="sheet-dialog">
@@ -480,7 +505,8 @@
   <div class="modal-card success-card"><div class="success-check">✓</div><h2>Merci !</h2><p id="feedbackSuccessText">Votre retour a bien été envoyé.</p><button type="button" class="primary-button full" data-close="feedbackSuccessDialog">Terminer</button></div>
 </dialog>
 
-<div id="toast" class="toast"></div>
-<script src="app.js"></script>
+<div id="toast" class="toast" role="status"></div>
+<script src="data.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

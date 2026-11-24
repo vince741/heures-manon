@@ -3,9 +3,14 @@ const KEY="aideplanning_v2";
 const PALETTE_KEY="aideplanning_palette";
 const MODE_KEY="aideplanning_mode";
 const RECENT_KEY="aideplanning_recent_people";
+const VIEW_KEY="aideplanning_planning_view";
+const RECOVERY_KEY="aideplanning_before_restore";
 let db=loadDatabase();
 let currentMonth=new Date(),selectedDate=new Date(),editingVisitId=null,editingPersonId=null;
-let recentPeople=JSON.parse(localStorage.getItem(RECENT_KEY)||"[]");
+const savedView=localStorage.getItem(VIEW_KEY);
+let planningView=["week","month"].includes(savedView)?savedView:matchMedia("(max-width: 700px)").matches?"week":"month";
+const savedRecent=readJson(RECENT_KEY,[]);
+let recentPeople=Array.isArray(savedRecent)?savedRecent:[];
 
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,"0");
@@ -16,15 +21,28 @@ const parseTime=t=>{if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*
 const duration=(a,b)=>{let x=parseTime(a),y=parseTime(b);if(y<x)y+=1440;return Math.max(0,y-x)};
 const fmt=m=>`${Math.floor(m/60)}h${pad(m%60)}`;
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fullDay=d=>d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+const visitCount=count=>`${count} visite${count>1?"s":""}`;
+const beneficiaryName=p=>p?.name||"Bénéficiaire introuvable";
+const colorOf=p=>validColors.has(p?.color)?p.color:"slate";
+
+function readJson(key,fallback){
+  try{return JSON.parse(localStorage.getItem(key))||fallback}catch{return fallback}
+}
 
 function loadDatabase(){
-  for(const key of ["aideplanning_v2","aideplanning_v1","aideplanning_data_v1"]){
+  for(const key of [KEY,"aideplanning_v1","aideplanning_data_v1"]){
+    let parsed;
     try{
-      const parsed=JSON.parse(localStorage.getItem(key)||"null");
-      if(parsed&&Array.isArray(parsed.people)&&parsed.visits&&typeof parsed.visits==="object"){
-        localStorage.setItem(KEY,JSON.stringify(parsed));return parsed;
-      }
-    }catch{}
+      const stored=localStorage.getItem(key);
+      if(stored===null)continue;
+      parsed=parsePlanningBackup(stored);
+    }catch{continue}
+    const data=assignBeneficiaryColors(parsed);
+    if(key!==KEY||parsed.people.some(p=>!validColors.has(p.color))){
+      try{localStorage.setItem(KEY,JSON.stringify(data))}catch{/* Keep the readable data if storage is full. */}
+    }
+    return data;
   }
   return {people:[],visits:{}};
 }
@@ -43,35 +61,123 @@ function rememberRecentPerson(id){
   recentPeople=[id,...recentPeople.filter(x=>x!==id)].slice(0,6);
   localStorage.setItem(RECENT_KEY,JSON.stringify(recentPeople));
 }
-function render(){renderCalendar();renderDay();renderPeople();renderStats();renderRecent()}
+function render(){renderPlanning();renderDay();renderPeople();renderStats();renderRecent()}
+
+function addDays(date,number){
+  const day=new Date(date);
+  day.setDate(day.getDate()+number);
+  return day;
+}
+
+function weekTitle(start,end){
+  const sameYear=start.getFullYear()===end.getFullYear();
+  const sameMonth=sameYear&&start.getMonth()===end.getMonth();
+  const first=sameMonth?start.getDate():start.toLocaleDateString("fr-FR",{day:"numeric",month:"short",...(!sameYear&&{year:"numeric"})});
+  return `${first} au ${end.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})}`;
+}
+
+function renderPlanning(){
+  const weekly=planningView==="week";
+  $("planningLayout").dataset.view=planningView;
+  $("weekCalendar").hidden=!weekly;
+  $("monthCalendar").hidden=weekly;
+  document.querySelectorAll("[data-planning-view]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.planningView===planningView)));
+  $("prevPeriod").setAttribute("aria-label",weekly?"Semaine précédente":"Mois précédent");
+  $("nextPeriod").setAttribute("aria-label",weekly?"Semaine suivante":"Mois suivant");
+
+  const start=mondayOf(selectedDate);
+  const days=Array.from({length:7},(_,i)=>addDays(start,i));
+  const visits=weekly?days.flatMap(day=>orderedVisits(dateKey(day))):monthVisits();
+  $("periodTitle").textContent=weekly?weekTitle(start,days[6]):currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  $("periodVisits").textContent=visits.length;
+  $("periodWork").textContent=fmt(visits.reduce((sum,v)=>sum+duration(v.start,v.end),0));
+  $("periodTravel").textContent=fmt(visits.reduce((sum,v)=>sum+visitTravel(v),0));
+  if(weekly)renderWeek(days);
+  else renderCalendar();
+  markSelectedDay();
+}
 
 function renderCalendar(){
-  const y=currentMonth.getFullYear(),m=currentMonth.getMonth(),mv=monthVisits();
-  const work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
-  $("monthTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
-  $("monthInfo").textContent=`${mv.length} visite${mv.length>1?"s":""} · ${fmt(work)} travaillé · ${fmt(travel)} trajet`;
-  $("calendar").innerHTML="";
+  const y=currentMonth.getFullYear(),m=currentMonth.getMonth();
+  const today=dateKey(new Date());
   const offset=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate();
-  for(let i=0;i<offset;i++){const b=document.createElement("button");b.className="day empty";b.disabled=true;$("calendar").appendChild(b)}
+  const cells=Array(offset).fill('<span class="day-placeholder" aria-hidden="true"></span>');
   for(let d=1;d<=days;d++){
-    const dt=new Date(y,m,d),k=dateKey(dt),visits=orderedVisits(k),workDay=visits.reduce((s,v)=>s+duration(v.start,v.end),0);
-    const b=document.createElement("button");
-    b.className="day"+(k===dateKey(new Date())?" today":"")+(k===dateKey(selectedDate)?" selected":"")+(visits.length?" has":"")+(overlapPairs(visits).length?" warning":"");
-    b.innerHTML=`<b>${d}</b><span class="day-meta">${visits.length?`${visits.length} visite${visits.length>1?"s":""}<br>${fmt(workDay)}`:""}</span>`;
-    b.onclick=()=>{selectedDate=dt;render()};$("calendar").appendChild(b);
+    const dt=new Date(y,m,d),key=dateKey(dt),visits=orderedVisits(key);
+    const names=visits.map(visit=>person(visit.personId));
+    const namesLabel=names.map(beneficiaryName).join(", ");
+    const warning=overlapPairs(visits).length>0;
+    const count=visits.length;
+    const label=[fullDay(dt),visitCount(count),namesLabel,warning?"horaires qui se chevauchent":""].filter(Boolean).join(". ");
+    const chips=names.slice(0,3).map(p=>`<span class="calendar-visit" data-color="${colorOf(p)}">${esc(beneficiaryName(p))}</span>`).join("");
+    const work=fmt(visits.reduce((sum,v)=>sum+duration(v.start,v.end),0));
+    cells.push(`<button type="button" class="day${key===today?" today":""}${count?" has-visits":""}" data-day-select="${key}" aria-label="${esc(label)}"${namesLabel?` title="${esc(namesLabel)}"`:""}${key===today?' aria-current="date"':""}>
+      <span class="day-top"><strong class="day-number">${d}</strong>${count?`<span class="day-duration">${work}</span>`:""}${warning?'<span class="calendar-warning" aria-hidden="true">!</span>':""}</span>
+      ${count?`<span class="day-meta">${visitCount(count)}</span>${chips}`:""}
+      ${count>3?`<span class="day-more">+${count-3}</span>`:""}
+    </button>`);
   }
+  $("calendar").innerHTML=cells.join("");
+}
+
+function renderWeek(days){
+  const today=dateKey(new Date());
+  $("weekCalendar").innerHTML=days.map(day=>{
+    const key=dateKey(day),visits=orderedVisits(key),label=fullDay(day);
+    const rows=visits.map(visit=>{
+      const p=person(visit.personId);
+      return `<button type="button" class="agenda-visit" data-visit-date="${key}" data-visit-id="${esc(visit.id)}" data-color="${colorOf(p)}">
+        <span class="agenda-name">${esc(beneficiaryName(p))}</span><span class="agenda-time">${visit.start}–${visit.end}</span>
+      </button>`;
+    }).join("");
+    const warning=overlapPairs(visits).length>0;
+    return `<article class="panel agenda-day" data-agenda-day="${key}">
+      <div class="agenda-heading">
+        <button class="agenda-date" type="button" data-day-select="${key}"${key===today?' aria-current="date"':""}>
+          <strong>${label}</strong><span>${visitCount(visits.length)}${key===today?" · Aujourd’hui":""}</span>
+        </button>
+        ${warning?'<span class="calendar-warning" role="img" aria-label="Horaires qui se chevauchent">!</span>':""}
+        <button class="agenda-add" type="button" data-visit-date="${key}" aria-label="Ajouter une intervention le ${label}">+</button>
+      </div>
+      ${rows?`<div class="agenda-visits">${rows}</div>`:""}
+    </article>`;
+  }).join("");
+}
+
+function markSelectedDay(){
+  const key=dateKey(selectedDate),calendar=planningView==="week"?$("weekCalendar"):$("calendar");
+  calendar.querySelectorAll("[data-day-select]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.daySelect===key)));
+  calendar.querySelectorAll("[data-agenda-day]").forEach(card=>card.classList.toggle("selected",card.dataset.agendaDay===key));
+}
+
+function selectPlanningDay(event){
+  const button=event.target.closest("button");
+  if(!button)return;
+  const key=button.dataset.daySelect||button.dataset.visitDate;
+  if(!key)return;
+  selectedDate=new Date(key+"T12:00:00");
+  currentMonth=new Date(selectedDate);
+  markSelectedDay();
+  renderDay();
+  if(button.dataset.visitDate){
+    openVisit(button.dataset.visitId);
+    return;
+  }
+  const heading=$("selectedDateTitle");
+  heading.focus({preventScroll:true});
+  heading.scrollIntoView({block:"nearest"});
 }
 function renderDay(){
   const visits=orderedVisits(dateKey(selectedDate)),work=visits.reduce((s,v)=>s+duration(v.start,v.end),0),travel=visits.reduce((s,v)=>s+visitTravel(v),0);
-  $("selectedDateTitle").textContent=selectedDate.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  $("selectedDateTitle").textContent=fullDay(selectedDate);
   $("dayWorkTotal").textContent=fmt(work);$("dayTravelTotal").textContent=`Trajet ${fmt(travel)}`;
   const overlaps=overlapPairs(visits);
   $("dayWarnings").innerHTML=overlaps.length?`<div class="warning-box">⚠️ ${overlaps.length} chevauchement${overlaps.length>1?"s":""} détecté${overlaps.length>1?"s":""}.</div>`:"";
   const list=$("visitsList");list.innerHTML="";
   if(!visits.length){list.innerHTML='<div class="empty-state">Aucune intervention pour cette journée.</div>';return}
   visits.forEach(v=>{
-    const p=person(v.personId),b=document.createElement("button");b.className="visit-card";
-    b.innerHTML=`<div><h3>${esc(p?.name||"Personne supprimée")}</h3><div class="visit-time">${v.start} → ${v.end}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong><span>Trajet ${fmt(visitTravel(v))}</span></div>`;
+    const p=person(v.personId),b=document.createElement("button");b.className="visit-card";b.dataset.color=colorOf(p);
+    b.innerHTML=`<div><h3>${esc(beneficiaryName(p))}</h3><div class="visit-time">${v.start} – ${v.end}</div>${v.note?`<div class="visit-note">${esc(v.note)}</div>`:""}</div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong><span>Trajet ${fmt(visitTravel(v))}</span></div>`;
     b.onclick=()=>openVisit(v.id);list.appendChild(b);
   });
 }
@@ -82,7 +188,7 @@ function renderPeople(){
   filtered.forEach(p=>{
     const all=Object.entries(db.visits).flatMap(([date,v])=>v.filter(x=>x.personId===p.id).map(x=>({...x,date})));
     const card=document.createElement("article");card.className="person-card";
-    card.innerHTML=`<h3>${esc(p.name)}</h3><div class="person-meta">${p.address?`📍 ${esc(p.address)}<br>`:""}${p.phone?`📞 ${esc(p.phone)}<br>`:""}${all.length} intervention${all.length>1?"s":""} · ${fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0))}</div><div class="person-actions"><button class="mini-button detail">Voir la fiche</button><button class="mini-button edit">Modifier</button></div>`;
+    card.innerHTML=`<h3 class="person-heading" data-color="${colorOf(p)}"><span aria-hidden="true"></span>${esc(p.name)}</h3><div class="person-meta">${p.address?`📍 ${esc(p.address)}<br>`:""}${p.phone?`📞 ${esc(p.phone)}<br>`:""}${all.length} intervention${all.length===1?"":"s"} · ${fmt(all.reduce((s,v)=>s+duration(v.start,v.end),0))}</div><div class="person-actions"><button class="mini-button detail">Voir la fiche</button><button class="mini-button edit">Modifier</button></div>`;
     card.querySelector(".detail").onclick=()=>openPersonDetail(p.id);card.querySelector(".edit").onclick=()=>openPerson(p.id);list.appendChild(card);
   });
 }
@@ -91,21 +197,21 @@ function renderStats(){
   const mv=monthVisits(),work=mv.reduce((s,v)=>s+duration(v.start,v.end),0),travel=mv.reduce((s,v)=>s+visitTravel(v),0);
   $("statsTitle").textContent=currentMonth.toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
   $("statWork").textContent=fmt(work);$("statTravel").textContent=fmt(travel);$("statVisits").textContent=mv.length;$("statDays").textContent=new Set(mv.map(v=>v.date)).size;
-  const totals={};mv.forEach(v=>totals[v.personId]=(totals[v.personId]||0)+duration(v.start,v.end));
-  $("personStats").innerHTML=Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([id,m])=>`<div class="person-stat"><span>${esc(person(id)?.name||"Personne supprimée")}</span><strong>${fmt(m)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
+  const totals=new Map();mv.forEach(v=>totals.set(v.personId,(totals.get(v.personId)||0)+duration(v.start,v.end)));
+  $("personStats").innerHTML=[...totals].sort((a,b)=>b[1]-a[1]).map(([id,m])=>`<div class="person-stat"><span>${esc(beneficiaryName(person(id)))}</span><strong>${fmt(m)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
   const weeks={};mv.forEach(v=>{const k=dateKey(mondayOf(new Date(v.date+"T12:00:00")));weeks[k]??={work:0,travel:0};weeks[k].work+=duration(v.start,v.end);weeks[k].travel+=visitTravel(v)});
   $("weekStats").innerHTML=Object.entries(weeks).sort().map(([k,w])=>`<div class="week-stat"><span>Semaine du ${new Date(k+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})}</span><strong>${fmt(w.work)} + ${fmt(w.travel)}</strong></div>`).join("")||'<div class="empty-state">Aucune donnée ce mois-ci.</div>';
 }
 function renderRecent(){
   const recent=recentPeople.map(person).filter(Boolean);
-  $("recentPeopleList").innerHTML=recent.length?recent.map(p=>`<button class="picker-person recent-person" data-person-id="${p.id}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`).join(""):'<div class="empty-state">Aucun bénéficiaire récent.</div>';
+  $("recentPeopleList").innerHTML=recent.length?recent.map(p=>`<button class="picker-person recent-person" data-person-id="${esc(p.id)}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`).join(""):'<div class="empty-state">Aucun bénéficiaire récent.</div>';
   document.querySelectorAll(".recent-person").forEach(b=>b.onclick=()=>openPersonDetail(b.dataset.personId));
   const all=Object.entries(db.visits).flatMap(([date,v])=>v.map(x=>({...x,date}))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start)).slice(0,8);
-  $("recentVisitsList").innerHTML=all.length?all.map(v=>`<button class="visit-card recent-visit" data-date="${v.date}" data-id="${v.id}"><div><h3>${esc(person(v.personId)?.name||"Personne supprimée")}</h3><div class="visit-time">${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} · ${v.start} → ${v.end}</div></div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong></div></button>`).join(""):'<div class="empty-state">Aucune intervention récente.</div>';
+  $("recentVisitsList").innerHTML=all.length?all.map(v=>`<button class="visit-card recent-visit" data-date="${v.date}" data-id="${esc(v.id)}"><div><h3>${esc(beneficiaryName(person(v.personId)))}</h3><div class="visit-time">${new Date(v.date+"T12:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"short"})} · ${v.start} → ${v.end}</div></div><div class="visit-side"><strong>${fmt(duration(v.start,v.end))}</strong></div></button>`).join(""):'<div class="empty-state">Aucune intervention récente.</div>';
   document.querySelectorAll(".recent-visit").forEach(b=>b.onclick=()=>{selectedDate=new Date(b.dataset.date+"T12:00:00");currentMonth=new Date(selectedDate);showPage("planningPage");render();setTimeout(()=>openVisit(b.dataset.id),50)});
 }
 function updateVisitPersonButton(id=""){const p=person(id);$("visitPerson").value=id||"";$("visitPersonLabel").textContent=p?.name||"Choisir une personne"}
-function pickerPersonButton(p){return `<button type="button" class="picker-person" data-person-id="${p.id}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`}
+function pickerPersonButton(p){return `<button type="button" class="picker-person" data-person-id="${esc(p.id)}"><span><strong>${esc(p.name)}</strong>${p.phone?`<small>${esc(p.phone)}</small>`:""}</span><span>›</span></button>`}
 function bindPickerButtons(){document.querySelectorAll("#personPickerDialog .picker-person").forEach(b=>b.onclick=()=>{updateVisitPersonButton(b.dataset.personId);rememberRecentPerson(b.dataset.personId);$("personPickerDialog").close()})}
 function renderPersonPicker(){
   const recent=recentPeople.map(person).filter(Boolean);
@@ -120,9 +226,10 @@ function setPickerTab(tab){
   $("pickerRecentPanel").classList.toggle("active",tab==="recent");$("pickerAllPanel").classList.toggle("active",tab==="all");$("pickerNewPanel").classList.toggle("active",tab==="new");
 }
 function openVisit(id=null){
-  if(!db.people.length){toast("Ajoute d’abord un bénéficiaire.");showPage("peoplePage");return}
-  editingVisitId=id;const v=(db.visits[dateKey(selectedDate)]||[]).find(x=>x.id===id);
+  const v=(db.visits[dateKey(selectedDate)]||[]).find(x=>x.id===id);
+  editingVisitId=v?.id||null;
   $("visitDialogTitle").textContent=v?"Modifier l’intervention":"Ajouter une intervention";
+  $("visitDialogDate").textContent=fullDay(selectedDate);
   updateVisitPersonButton(v?.personId||"");$("visitStart").value=v?.start||"08:00";$("visitEnd").value=v?.end||"09:00";$("visitTravel").value=v?.travel||"00:00";$("visitNote").value=v?.note||"";
   $("deleteVisitBtn").style.display=v?"block":"none";$("visitDialog").showModal();
 }
@@ -130,6 +237,8 @@ function openPerson(id=null){
   editingPersonId=id;const p=person(id);
   $("personDialogTitle").textContent=p?"Modifier le bénéficiaire":"Ajouter un bénéficiaire";
   $("personName").value=p?.name||"";$("personAddress").value=p?.address||"";$("personPhone").value=p?.phone||"";$("personNotes").value=p?.notes||"";
+  $("personColor").value=p?.color||leastUsedColor(db.people);
+  $("personColor").dataset.color=$("personColor").value;
   $("deletePersonBtn").style.display=p?"block":"none";$("personDialog").showModal();
 }
 function openPersonDetail(id){
@@ -143,7 +252,11 @@ function openPersonDetail(id){
 }
 function showPage(id){
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id===id));
-  document.querySelectorAll(".nav-button").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  document.querySelectorAll(".nav-button").forEach(b=>{
+    const active=b.dataset.page===id;
+    b.classList.toggle("active",active);
+    if(active)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");
+  });
   if(id==="statsPage")renderStats();if(id==="recentPage")renderRecent();
 }
 const paletteNames={
@@ -170,20 +283,35 @@ function applyAppearance(palette,mode){
 
 $("visitForm").onsubmit=e=>{
   e.preventDefault();const k=dateKey(selectedDate),payload={personId:$("visitPerson").value,start:$("visitStart").value,end:$("visitEnd").value,travel:$("visitTravel").value||"00:00",note:$("visitNote").value.trim()};
-  if(!payload.personId)return toast("Choisis un bénéficiaire.");if(duration(payload.start,payload.end)<=0)return toast("Les horaires sont invalides.");
+  if(!person(payload.personId))return toast("Choisis un bénéficiaire.");if(duration(payload.start,payload.end)<=0)return toast("Les horaires sont invalides.");
   db.visits[k]??=[];
   if(editingVisitId){const i=db.visits[k].findIndex(v=>v.id===editingVisitId);db.visits[k][i]={...db.visits[k][i],...payload}}else db.visits[k].push({id:uid("visit"),...payload});
   rememberRecentPerson(payload.personId);save();$("visitDialog").close();render();toast("Intervention enregistrée.");
 };
 $("deleteVisitBtn").onclick=()=>{const k=dateKey(selectedDate);db.visits[k]=(db.visits[k]||[]).filter(v=>v.id!==editingVisitId);if(!db.visits[k].length)delete db.visits[k];save();$("visitDialog").close();render();toast("Intervention supprimée.")};
-$("personForm").onsubmit=e=>{e.preventDefault();const payload={name:$("personName").value.trim(),address:$("personAddress").value.trim(),phone:$("personPhone").value.trim(),notes:$("personNotes").value.trim()};if(!payload.name)return toast("Le nom est obligatoire.");if(editingPersonId){const i=db.people.findIndex(p=>p.id===editingPersonId);db.people[i]={...db.people[i],...payload}}else db.people.push({id:uid("person"),...payload});save();$("personDialog").close();render();toast("Bénéficiaire enregistré.")};
+$("personColor").replaceChildren(...BENEFICIARY_COLORS.map(([color,label])=>new Option(label,color)));
+$("personColor").onchange=e=>{e.target.dataset.color=e.target.value};
+$("personForm").onsubmit=e=>{e.preventDefault();const payload={name:$("personName").value.trim(),address:$("personAddress").value.trim(),phone:$("personPhone").value.trim(),notes:$("personNotes").value.trim(),color:$("personColor").value};if(!payload.name)return toast("Le nom est obligatoire.");if(editingPersonId){const i=db.people.findIndex(p=>p.id===editingPersonId);db.people[i]={...db.people[i],...payload}}else db.people.push({id:uid("person"),...payload});save();$("personDialog").close();render();toast("Bénéficiaire enregistré.")};
 $("deletePersonBtn").onclick=()=>{if(!confirm("Supprimer ce bénéficiaire et ses interventions ?"))return;db.people=db.people.filter(p=>p.id!==editingPersonId);Object.keys(db.visits).forEach(k=>{db.visits[k]=db.visits[k].filter(v=>v.personId!==editingPersonId);if(!db.visits[k].length)delete db.visits[k]});save();$("personDialog").close();render();toast("Bénéficiaire supprimé.")};
-$("visitPersonButton").onclick=()=>{renderPersonPicker();setPickerTab(recentPeople.length?"recent":"all");$("personPickerDialog").showModal()};
+$("visitPersonButton").onclick=()=>{renderPersonPicker();setPickerTab(recentPeople.some(id=>person(id))?"recent":db.people.length?"all":"new");$("personPickerDialog").showModal()};
 $("pickerSearch").oninput=renderPersonPicker;
 document.querySelectorAll(".segment").forEach(b=>b.onclick=()=>setPickerTab(b.dataset.pickerTab));
-$("quickAddPersonBtn").onclick=()=>{const name=$("quickPersonName").value.trim(),phone=$("quickPersonPhone").value.trim();if(!name)return toast("Le nom est obligatoire.");const p={id:uid("person"),name,address:"",phone,notes:""};db.people.push(p);save();rememberRecentPerson(p.id);updateVisitPersonButton(p.id);$("quickPersonName").value="";$("quickPersonPhone").value="";$("personPickerDialog").close();render();toast("Bénéficiaire créé.")};
-$("prevMonth").onclick=()=>{currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()-1,1);selectedDate=new Date(currentMonth);render()};
-$("nextMonth").onclick=()=>{currentMonth=new Date(currentMonth.getFullYear(),currentMonth.getMonth()+1,1);selectedDate=new Date(currentMonth);render()};
+$("quickAddPersonBtn").onclick=()=>{const name=$("quickPersonName").value.trim(),phone=$("quickPersonPhone").value.trim();if(!name)return toast("Le nom est obligatoire.");const p={id:uid("person"),name,address:"",phone,notes:"",color:leastUsedColor(db.people)};db.people.push(p);save();rememberRecentPerson(p.id);updateVisitPersonButton(p.id);$("quickPersonName").value="";$("quickPersonPhone").value="";$("personPickerDialog").close();render();toast("Bénéficiaire créé.")};
+
+function movePeriod(direction){
+  selectedDate=planningView==="week"?addDays(selectedDate,direction*7):new Date(currentMonth.getFullYear(),currentMonth.getMonth()+direction,1);
+  currentMonth=new Date(selectedDate);
+  render();
+}
+$("prevPeriod").onclick=()=>movePeriod(-1);
+$("nextPeriod").onclick=()=>movePeriod(1);
+$("calendar").onclick=selectPlanningDay;
+$("weekCalendar").onclick=selectPlanningDay;
+document.querySelectorAll("[data-planning-view]").forEach(button=>button.onclick=()=>{
+  planningView=button.dataset.planningView;
+  localStorage.setItem(VIEW_KEY,planningView);
+  renderPlanning();
+});
 $("todayBtn").onclick=()=>{currentMonth=new Date();selectedDate=new Date();showPage("planningPage");render()};
 $("addVisitBtn").onclick=()=>openVisit();$("addPersonBtn").onclick=()=>openPerson();$("personSearch").oninput=renderPeople;
 document.querySelectorAll(".nav-button").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
@@ -192,16 +320,113 @@ document.querySelectorAll("[data-open-settings]").forEach(b=>b.onclick=()=>$(b.d
 document.querySelectorAll(".palette-choice").forEach(b=>b.onclick=()=>applyAppearance(b.dataset.paletteChoice,document.documentElement.dataset.mode));
 document.querySelectorAll(".mode-choice").forEach(b=>b.onclick=()=>applyAppearance(document.documentElement.dataset.palette,b.dataset.modeChoice));
 
-function download(content,name,type){const a=document.createElement("a"),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+function download(content,name,type){
+  const link=document.createElement("a"),url=URL.createObjectURL(new Blob([content],{type}));
+  link.href=url;
+  link.download=name;
+  link.hidden=true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 $("exportCsvBtn").onclick=()=>{const rows=[["Date","Bénéficiaire","Entrée","Sortie","Temps travaillé","Temps de trajet","Note"]];monthVisits().sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start)).forEach(v=>rows.push([v.date,person(v.personId)?.name||"",v.start,v.end,fmt(duration(v.start,v.end)),fmt(visitTravel(v)),v.note||""]));download("\ufeff"+rows.map(r=>r.map(c=>`"${String(c).replaceAll('"','""')}"`).join(";")).join("\n"),`aideplanning-${currentMonth.getFullYear()}-${pad(currentMonth.getMonth()+1)}.csv`,"text/csv;charset=utf-8")};
-$("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauvegarde-${new Date().toISOString().slice(0,10)}.json`,"application/json");
-$("restoreInput").onchange=async e=>{try{const parsed=JSON.parse(await e.target.files[0].text());if(!parsed.people||!parsed.visits)throw new Error();if(confirm("Remplacer toutes les données actuelles ?")){db=parsed;save();render();toast("Sauvegarde restaurée.")}}catch{toast("Sauvegarde invalide.")}e.target.value=""};
+
+let selectedBackup=null;
+let backupReadVersion=0;
+
+function dataCountsLabel({people,visits}){
+  return `${people} bénéficiaire${people>1?"s":""} · ${visitCount(visits)}`;
+}
+
+function showImportMessage(message,error=false){
+  const status=$("importMessage");
+  status.textContent=message;
+  status.hidden=!message;
+  status.classList.toggle("error",error);
+}
+
+function refreshImportPreview(){
+  $("recoveryBackupBtn").hidden=!localStorage.getItem(RECOVERY_KEY);
+  $("importPreview").hidden=!selectedBackup;
+  if(!selectedBackup)return;
+
+  const current=countPlanningData(db);
+  const {additions}=mergePlanningData(db,selectedBackup);
+  const hasAdditions=additions.people>0||additions.visits>0;
+  $("importCounts").textContent=dataCountsLabel(countPlanningData(selectedBackup));
+  $("importAdditions").textContent=hasAdditions?`À ajouter · ${dataCountsLabel(additions)}. Les fiches et visites existantes sont conservées.`:"Toutes les fiches et visites de ce fichier sont déjà présentes.";
+  $("mergeBackupBtn").disabled=!hasAdditions;
+  $("replaceBackupBtn").hidden=current.people===0&&current.visits===0;
+}
+
+function importBackup(replace){
+  if(!selectedBackup)return;
+  if(replace&&!confirm("Remplacer tous les bénéficiaires et toutes les interventions par cette sauvegarde ? AidePlanning conservera une copie des données actuelles."))return;
+
+  let additions,next;
+  try{
+    const stored=localStorage.getItem(KEY);
+    const current=stored===null?db:parsePlanningBackup(stored);
+    if(replace){
+      next=assignBeneficiaryColors(selectedBackup);
+      localStorage.setItem(RECOVERY_KEY,JSON.stringify(current));
+    }else{
+      ({data:next,additions}=mergePlanningData(current,selectedBackup));
+    }
+    localStorage.setItem(KEY,JSON.stringify(next));
+  }catch{
+    showImportMessage("Impossible d’enregistrer l’import. Vérifiez l’espace disponible sur l’appareil et réessayez.",true);
+    return;
+  }
+  db=next;
+  selectedBackup=null;
+  render();
+  refreshImportPreview();
+  const status=replace?"Sauvegarde restaurée.":`Import terminé. Éléments ajoutés · ${dataCountsLabel(additions)}.`;
+  showImportMessage(status);
+  $("chooseBackupBtn").focus();
+}
+
+$("backupBtn").onclick=()=>download(JSON.stringify(db,null,2),`aideplanning-sauvegarde-${dateKey(new Date())}.json`,"application/json");
+$("chooseBackupBtn").onclick=()=>$("restoreInput").click();
+$("restoreInput").onchange=async e=>{
+  const [file]=e.target.files;
+  e.target.value="";
+  if(!file)return;
+  const version=++backupReadVersion;
+  selectedBackup=null;
+  showImportMessage("Lecture de la sauvegarde…");
+  refreshImportPreview();
+  try{
+    const fileText=await file.text();
+    if(version!==backupReadVersion)return;
+    selectedBackup=parsePlanningBackup(fileText);
+    showImportMessage("");
+    refreshImportPreview();
+  }catch(error){
+    if(version===backupReadVersion)showImportMessage(error.message||"Impossible de lire la sauvegarde.",true);
+  }
+};
+$("dataDialog").addEventListener("close",()=>{
+  backupReadVersion++;
+  selectedBackup=null;
+  showImportMessage("");
+  refreshImportPreview();
+});
+$("mergeBackupBtn").onclick=()=>importBackup(false);
+$("replaceBackupBtn").onclick=()=>importBackup(true);
+$("recoveryBackupBtn").onclick=()=>{
+  const stored=localStorage.getItem(RECOVERY_KEY);
+  if(stored)download(stored,`aideplanning-avant-remplacement-${dateKey(new Date())}.json`,"application/json");
+};
+refreshImportPreview();
 
 
 const FEEDBACK_ENDPOINT="https://script.google.com/macros/s/AKfycbzE9UqtjOEAfOv7DEW3uQ3hboZbz6fQYC9UxOqEXeJiR5iRFtAcy-7Tk5OiM9iBJtTZXA/exec";
 const FEEDBACK_QUEUE_KEY="aideplanning_feedback_queue_v12";
 const FEEDBACK_HISTORY_KEY="aideplanning_feedback_history_v12";
-const APP_VERSION="12.1 Premium";
+const APP_VERSION="13";
 const feedbackConfigs={
   review:{type:"❤️ Avis",title:"Donner mon avis",emoji:"♥",intro:"Merci d’utiliser AidePlanning. Votre avis aide à améliorer l’application.",rating:true},
   bug:{type:"🐞 Bug",title:"Signaler un bug",emoji:"🐞",intro:"Décrivez précisément le problème rencontré afin qu’il puisse être corrigé.",rating:false},
@@ -209,7 +434,6 @@ const feedbackConfigs={
   contact:{type:"✉️ Contact",title:"Contacter le développeur",emoji:"✉️",intro:"Posez une question ou demandez à être rappelé(e).",rating:false}
 };
 let activeFeedbackType="review",feedbackRating=0,feedbackSending=false;
-const readJson=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))||fallback}catch{return fallback}};
 const writeJson=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
 function deviceDescription(){
   const ua=navigator.userAgent||"Appareil inconnu";
@@ -265,7 +489,17 @@ $("retryFeedbackBtn").onclick=()=>flushFeedbackQueue(false);
 addEventListener("online",()=>flushFeedbackQueue(true));
 renderFeedbackHistory();
 setTimeout(()=>flushFeedbackQueue(true),1200);
-$("startAppBtn").onclick=()=>{localStorage.setItem("aideplanning_onboarding_done","1");$("onboardingDialog").close()};
+function finishOnboarding(){
+  localStorage.setItem("aideplanning_onboarding_done","1");
+  $("onboardingDialog").close();
+}
+$("startAppBtn").onclick=finishOnboarding;
+$("onboardingImportBtn").onclick=()=>{
+  finishOnboarding();
+  showPage("morePage");
+  $("dataDialog").showModal();
+  $("chooseBackupBtn").focus();
+};
 
 
 let deferredInstallPrompt=null;
@@ -283,7 +517,6 @@ function updateInstallStatus(){
   const icon=$("installStatusIcon");
   const title=$("installStatusTitle");
   const text=$("installStatusText");
-  const warning=$("onboardingInstallWarning");
   const button=$("nativeInstallBtn");
 
   if(summary){
@@ -298,7 +531,6 @@ function updateInstallStatus(){
   if(text)text.textContent=installed
     ? "AidePlanning fonctionne depuis l’écran d’accueil."
     : "Installe AidePlanning sur l’écran d’accueil pour une utilisation et un stockage local plus fiables.";
-  if(warning)warning.classList.toggle("is-installed",installed);
   if(button)button.hidden=installed || !deferredInstallPrompt;
 }
 
@@ -343,6 +575,8 @@ if(!initialPalette && legacyTheme){
   else{initialPalette=legacyTheme;initialMode="light"}
 }
 applyAppearance(initialPalette||"rose",initialMode||"light");
-if(!localStorage.getItem("aideplanning_onboarding_done"))setTimeout(()=>$("onboardingDialog").showModal(),250);
+if(!localStorage.getItem("aideplanning_onboarding_done")&&!db.people.length&&!countPlanningData(db).visits){
+  $("onboardingDialog").showModal();
+}
 if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
 render();
